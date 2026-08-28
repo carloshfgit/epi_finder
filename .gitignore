@@ -1,2 +1,58 @@
+# Documentação / Manuais locais
 DESCRIPTION.md
 GUIDE.md
+docs/GUIDE.md
+docs/DESCRIPTION.md
+
+# Ambientes Virtuais
+venv/
+.venv/
+env/
+ENV/
+
+# Python & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Visão Computacional, YOLO & PyTorch (Modelos, Datasets e Execuções)
+datasets/
+data/
+runs/
+weights/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.weights
+*.bin
+*.safetensors
+
+# Compactados e Dados Brutos
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Logs & Monitoramento de Experimentos
+wandb/
+mlruns/
+*.log
+
+# IDEs & SO
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
