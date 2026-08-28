@@ -1,0 +1,16 @@
+services:
+  epi-finder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: epi_finder_app
+    ports:
+      - "8888:8888" # Jupyter Lab
+    volumes:
+      # Sincroniza o diretório do projeto entre o host e o container
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    ipc: host # Melhora performance do PyTorch DataLoader com multiprocessing
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=''
