@@ -122,9 +122,51 @@ Aprofundei os motivos técnicos pelos quais esta estrutura é a mais adequada pa
 
 ---
 
-## 4. Próximos Passos (Fase 2 em diante)
+## 4. Fase 2: Coleta, Seleção e Rotulagem (Boas Práticas e Decisões)
 
-Com a Fase 1 concluída, minhas próximas ações serão:
-1. **Fase 2 (Coleta e Rotulagem):** Coletar de 200 a 400 imagens representativas e realizar a anotação das classes `helmet` e `no_helmet` via Roboflow, exportando no formato YOLOv8 e dividindo em treino, validação e teste.
-2. **Fase 3 (Pipeline & EDA):** Construir o notebook de análise exploratória utilizando Pandas e NumPy para auditar o balanceamento das classes, calcular a distribuição das áreas das caixas e gerar o arquivo `data.yaml`.
-3. **Fase 4 (Treinamento):** Executar o ajuste fino do YOLOv8 Nano e acompanhar as curvas de perda e métricas de convergência.
+Nesta fase, estudei o ecossistema de anotação de dados e as ferramentas da indústria de Visão Computacional, tomando decisões estratégicas para o avanço do projeto.
+
+### 4.1. Decisão do Dataset (Roboflow Universe)
+Optei por utilizar um dataset pré-rotulado do **Roboflow Universe**. Essa escolha permite acelerar a construção da solução e focar no domínio do pipeline completo: Análise Exploratória de Dados (EDA) com Pandas/NumPy, treinamento do YOLOv8 Nano, avaliação detalhada de métricas e construção do script de inferência.
+
+### 4.2. Panorama das Ferramentas de Rotulagem na Indústria
+Mapeei as principais ferramentas utilizadas no mercado para anotação de dados de Visão Computacional:
+* **Roboflow:** Excelente para prototipagem rápida, gestão de dados na nuvem, data augmentation e exportação multiformato.
+* **CVAT (Computer Vision Annotation Tool):** Padrão open-source da indústria mantido pela OpenCV/Intel. Destaca-se no processamento de vídeos (com rastreamento e interpolação automática entre quadros).
+* **Label Studio:** Plataforma open-source multi-modal (imagem, áudio, texto), ideal para integração via API em pipelines Python de MLOps.
+* **X-AnyLabeling:** Ferramenta desktop local integrada ao **SAM (Segment Anything Model)**, permitindo auto-rotulagem com 1 clique.
+* **Plataformas Enterprise (Scale AI, Labelbox, V7 Labs):** Soluções corporativas focadas no gerenciamento de equipes de anotação em larga escala com fluxos rigorosos de controle de qualidade.
+
+### 4.3. Boas Práticas Profissionais para Rotulagem de Imagens
+Consolidei as diretrizes fundamentais para garantir datasets de alta qualidade (*"Garbage In, Garbage Out"*):
+1. **Guia de Anotação (*Annotation Guidelines*):** Estabelecer regras claras antes de iniciar (limite mínimo de pixels para objetos distantes, regras para objetos cortados nas bordas e tratamento de oclusões).
+2. **Caixas Delimitadoras Ajustadas (*Tight Bounding Boxes*):** As caixas devem envolver os objetos de forma rente, sem deixar sobra excessiva de fundo (o que ensinaria o modelo a associar o fundo ao objeto) e sem cortar partes visíveis da classe.
+3. **Anotação Exaustiva:** Todas as ocorrências das classes visíveis na imagem devem ser obrigatoriamente rotuladas. Instâncias esquecidas são interpretadas pelo algoritmo de treino do YOLO como "fundo/negativo", penalizando severamente o aprendizado.
+4. **Auto-Rotulagem Assistida por IA (*AI-Assisted Labeling / Human-in-the-Loop*):** Uso de modelos pré-treinados ou modelos de segmentação para gerar caixas prévias automaticamente, reduzindo até 80% do esforço manual, com o operador humano atuando na revisão e ajuste fino das caixas.
+
+### 4.4. Conclusão da Fase 2 e Estrutura do Dataset Baixado
+* **Dataset Selecionado:** `hard-hat-detection` (Roboflow Universe, versão em formato YOLOv8).
+* **Localização no Projeto:** Baixado e descompactado com sucesso em [`data/dataset/`].
+* **Particionamento Obtido:** Pastas `train/`, `valid/` e `test/` prontas com subpastas `images/` e `labels/`.
+* **Classes Mapeadas no `data.yaml`:**
+  * `0`: `with_helmet` (com capacete de proteção)
+  * `1`: `without_helmet` (sem capacete / cabeça visível)
+
+### 4.5. Entendimento sobre Extração e Divisão do Dataset (Train / Valid / Test)
+* **Preservação da Hierarquia ao Descompactar:** Entendi que ao exportar um dataset no formato **YOLOv8** do Roboflow, o arquivo `.zip` já é montado na nuvem contendo a árvore interna de pastas (`train/`, `valid/`, `test/`, cada uma com subpastas `images/` e `labels/`). A ação de descompactar apenas extrai essa estrutura pré-existente para o diretório de destino.
+* **Definição da Proporção do Split (Train/Valid/Test):** A divisão do conjunto de dados em Treino, Validação e Teste é definida na etapa de geração do dataset dentro da plataforma (ex: Roboflow Universe). Aprendi que a ferramenta realiza o sorteio aleatório das imagens (respeitando o balanceamento de classes) e distribui as amostras antes de disponibilizar o pacote compactado para download.
+
+---
+
+
+## 5. Próximos Passos (Fase 3: Pipeline & EDA)
+
+Com a Fase 2 (Coleta e Rotulagem) totalmente concluída, o foco agora é a **Fase 3**:
+1. **Configuração do `data/data.yaml`:** Criar/ajustar o arquivo principal de dados na raiz de `data/` apontando os caminhos absolutos ou relativos para o dataset.
+2. **Análise Exploratória de Dados (EDA com Pandas & NumPy):** Criar o notebook `notebooks/01_eda_dataset.ipynb` para:
+   * Ler os arquivos `.txt` de anotações em um `pandas.DataFrame`.
+   * Verificar a distribuição de contagem de cada classe (`with_helmet` vs `without_helmet`).
+   * Calcular estatísticas das caixas (largura, altura, área, aspect ratio) usando NumPy.
+3. **Fase 4 (Treinamento):** Iniciar o ajuste fino do modelo `yolov8n.pt`.
+
+
