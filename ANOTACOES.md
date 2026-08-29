@@ -164,31 +164,31 @@ Consolidei as diretrizes fundamentais para garantir datasets de alta qualidade (
 Nesta fase, implementei o pipeline de preparação e realizei uma auditoria estatística profunda do dataset por meio de Análise Exploratória de Dados (EDA), além de desenvolver módulos utilitários em Python para manipulação matricial e cálculo de métricas essenciais.
 
 ### 5.1. Configuração e Padronização do `data/data.yaml`
-* Criei o arquivo de configuração [`data/data.yaml`](file:///home/carloshf/epi_finder/data/data.yaml), estabelecendo o contrato de treinamento para o YOLOv8:
+* Criei e configurei o arquivo [`data/data.yaml`](file:///home/carloshf/epi_finder/data/data.yaml) para o novo dataset expandido:
   * `path: ../data/dataset`: caminho relativo padronizado para localização das partições.
-  * `train: train/images` e `val: valid/images`.
-  * `test: valid/images`: configurado temporariamente apontando para a validação, uma vez que o split exportado do Roboflow Universe distribuiu 100% das imagens entre Treino e Validação (80% / 20%).
-  * Mapeamento binário das classes: `0: with_helmet` e `1: without_helmet`.
+  * Particionamento completo mapeado: `train: train/images`, `val: valid/images` e `test: test/images`.
+  * Mapeamento binário das classes do novo dataset:
+    * `0: head` (sem capacete / cabeça desprotegida — classe de infração/alerta).
+    * `1: helmet` (com capacete de proteção — classe conforme/seguro).
 
-### 5.2. Resultados e Diagnósticos da Análise Exploratória (Pandas)
-No notebook [`notebooks/01_eda_dataset.ipynb`](file:///home/carloshf/epi_finder/notebooks/01_eda_dataset.ipynb), estruturei dois DataFrames (`df_annotations` e `df_images`) que revelaram métricas fundamentais sobre a integridade e características do dataset:
+### 5.2. Resultados e Diagnósticos da Análise Exploratória do Novo Dataset (Pandas)
+No notebook [`notebooks/01_eda_dataset.ipynb`](file:///home/carloshf/epi_finder/notebooks/01_eda_dataset.ipynb), estruturei dois DataFrames (`df_annotations` e `df_images`) que revelaram o salto de qualidade do novo dataset:
 
 1. **Volume Geral e Particionamento:**
-   * **Total de imagens:** 442 (354 em treino e 88 em validação — proporção exata de 80.1% / 19.9%).
-   * **Total de instâncias anotadas:** 623 caixas delimitadoras (508 em treino e 115 em validação).
+   * **Total de imagens:** **946 imagens** (831 em treino - 87,8%, 76 em validação - 8,0% e 39 em teste - 4,1%).
+   * **Total de instâncias anotadas:** **4.131 caixas delimitadoras** (3.666 em treino, 337 em validação e 128 em teste).
 
-2. **Severo Desbalanceamento de Classes:**
-   * **`with_helmet` (classe 0):** 590 anotações (**94,70%**).
-   * **`without_helmet` (classe 1):** 33 anotações (**5,30%**).
-   * No conjunto de treino: 481 com capacete vs. 27 sem capacete.
-   * No conjunto de validação: 109 com capacete vs. 6 sem capacete.
+2. **Equilíbrio de Classes Muito Superior:**
+   * **`helmet` (classe 1 - com capacete):** 3.164 anotações (**76,59%**).
+   * **`head` (classe 0 - sem capacete / infração):** **967 anotações (23,41%)**.
+   * *Comparativo:* O dataset inicial possuía apenas 33 caixas sem capacete (5,3%). Com o novo dataset, dispomos de **967 instâncias reais de infração**, garantindo que a rede aprenda a reconhecer cabeças desprotegidas em múltiplos ângulos e condições de iluminação.
 
-3. **Presença de Infrações por Imagem:**
-   * Apenas **33 imagens** de todo o dataset (7,47%) contêm pessoas sem capacete. As outras 409 imagens (92,53%) possuem somente trabalhadores em conformidade.
+3. **Presença de Infrações por Cena:**
+   * **187 imagens** (19,77% do total) possuem pelo menos uma pessoa sem capacete, oferecendo farto contexto de canteiros de obra com infrações.
 
 4. **Distribuição Geométrica das Caixas:**
-   * **Área normalizada média:** $0,0269$ (~2,7% da imagem total), caracterizando objetos de porte pequeno a médio no campo de visão.
-   * **Proporção média (Aspect Ratio $W/H$):** $0,855$, confirmando caixas ligeiramente mais altas do que largas, correspondente à anatomia da cabeça e pescoço humanos.
+   * **Área normalizada média:** $0,0108$ (~1,1% da imagem total), com desvio padrão de $0,0166$.
+   * **Proporção média (Aspect Ratio $W/H$):** $1,071$, com mediana em $1,038$ (caixas quadrangulares/anatômicas bem ajustadas aos contornos de cabeças e capacetes).
 
 ### 5.3. Aprendizados Práticos de Manipulação Matricial com NumPy
 Durante a construção do notebook e dos utilitários, pratiquei operações vetoriais de baixo nível fundamentais para Visão Computacional:
@@ -198,31 +198,28 @@ Durante a construção do notebook e dos utilitários, pratiquei operações vet
 * **Implementação do IoU (Intersection over Union) do Zero:** Desenvolvi a função matemática do IoU utilizando `np.maximum` e `np.minimum` para calcular as coordenadas e áreas da caixa de interseção e da união, validando matematicamente sobreposições totais ($1.0$), parciais e disjuntas ($0.0$).
 
 ### 5.4. Modularização em `src/utils.py`
-Para garantir reusabilidade de código e evitar dependência de funções isoladas em notebooks, criei o módulo [`src/utils.py`](file:///home/carloshf/epi_finder/src/utils.py), contendo:
-* `yolo_to_xyxy()` e `xyxy_to_yolo()`
-* `compute_iou()` e `compute_iou_matrix()` (com broadcasting NumPy)
-* `extract_roi()`, `bgr_to_rgb()` e `normalize_image()`
-* `load_yolo_annotation()`
-* `draw_bounding_boxes()` com identificação por cores: **Verde** para seguro (`with_helmet`) e **Vermelho** para perigo (`without_helmet`).
+Para garantir reusabilidade de código e evitar dependência de funções isoladas em notebooks, mantive o módulo [`src/utils.py`](file:///home/carloshf/epi_finder/src/utils.py) atualizado com as classes e cores:
+* `DEFAULT_CLASSES`: `{0: "head", 1: "helmet"}`
+* `CLASS_COLORS_BGR`: `0: (0, 0, 255)` (Vermelho - Alerta) e `1: (0, 255, 0)` (Verde - Seguro).
+* Funções: `yolo_to_xyxy()`, `xyxy_to_yolo()`, `compute_iou()`, `compute_iou_matrix()`, `extract_roi()`, `bgr_to_rgb()`, `normalize_image()`, `load_yolo_annotation()`, `draw_bounding_boxes()`.
 
 ### 5.5. Impactos Estratégicos para a Fase 4 (Treinamento)
-A EDA trouxe diagnósticos cruciais que orientarão as decisões no treinamento do YOLOv8:
-* **Acurácia Global é Enganosa:** Como 94,7% das caixas são de trabalhadores com capacete, um modelo que nunca detecte nenhuma infração ainda atingiria quase 95% de precisão geral aparente.
-* **Métrica-Chave:** No treinamento, a prioridade absoluta deve ser o **Recall** e o **mAP@50** específicos da classe `without_helmet`. Não podemos permitir que o modelo deixe de alarmar trabalhadores expostos ao perigo (falsos negativos são críticos).
-* **Data Augmentation:** As técnicas de aumento de dados embutidas no YOLO (Mosaic, MixUp, Random Flipping) serão essenciais para enriquecer a diversidade dos poucos exemplos de infração disponíveis.
+* **Poder de Generalização:** Com 4.131 anotações totais e 967 cabeças sem capacete, o modelo YOLOv8 terá um volume de dados robusto para transfer learning e convergência estável.
+* **Avaliação Independente de Teste:** O split de `test` com 39 imagens e 128 anotações permitirá uma validação cega final totalmente isolada dos conjuntos de treino e validação.
 
 ---
 
 ## 6. Próximos Passos (Fase 4: Treinamento e Experimentos)
 
-Com a Fase 3 integralmente concluída e o dataset auditado:
+Com o novo dataset 100% auditado e organizado:
 1. **Notebook de Treinamento (`notebooks/02_training_yolov8.ipynb`):**
    * Configurar hiperparâmetros de fine-tuning utilizando pesos pré-treinados do `yolov8n.pt`.
    * Definir epochs, batch size, tamanho da imagem (640x640) e monitoramento de perdas (`box_loss`, `cls_loss`, `dfl_loss`).
 2. **Execução do Treinamento:**
    * Rodar o treino via GPU/CPU dentro do container Docker e registrar artefatos em `runs/detect/`.
 3. **Fase 5 (Avaliação & Métricas):**
-   * Analisar curvas de precisão-revocação, matriz de confusão e evolução do mAP por classe.
+   * Analisar curvas de precisão-revocação, matriz de confusão e evolução do mAP@50 no split de teste.
+
 
 
 

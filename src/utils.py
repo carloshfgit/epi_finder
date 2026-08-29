@@ -11,18 +11,20 @@ import cv2
 import numpy as np
 
 
-# Mapeamento padrão de classes do EPI Finder
+# Mapeamento padrão de classes do EPI Finder (Novo Dataset Roboflow)
+# 0: head -> Pessoa sem capacete / cabeça desprotegida (Infração / Alerta)
+# 1: helmet -> Pessoa com capacete de proteção (Seguro / Conforme)
 DEFAULT_CLASSES: Dict[int, str] = {
-    0: "with_helmet",
-    1: "without_helmet"
+    0: "head",
+    1: "helmet"
 }
 
 # Paleta de cores padrão no padrão BGR (OpenCV)
-# 0: with_helmet -> Verde (Seguro)
-# 1: without_helmet -> Vermelho (Alerta/Infração)
+# 0: head (Sem capacete) -> Vermelho (Alerta/Infração)
+# 1: helmet (Com capacete) -> Verde (Seguro/Conforme)
 CLASS_COLORS_BGR: Dict[int, Tuple[int, int, int]] = {
-    0: (0, 255, 0),    # Verde
-    1: (0, 0, 255)     # Vermelho
+    0: (0, 0, 255),    # Vermelho (Alerta)
+    1: (0, 255, 0)     # Verde (Seguro)
 }
 
 
@@ -312,7 +314,7 @@ def draw_bounding_boxes(
             (x1 + 2, text_y2 - baseline),
             font,
             font_scale,
-            (0, 0, 0) if cls_id == 0 else (255, 255, 255),
+            (255, 255, 255) if cls_id == 0 else (0, 0, 0),
             font_thickness,
             cv2.LINE_AA
         )

@@ -4,10 +4,10 @@
 path: ../data/dataset
 train: train/images
 val: valid/images
-test: valid/images  # O split do Roboflow foi exportado em 80% train / 20% valid
+test: test/images
 
-# Classes do modelo
+# Classes do modelo (0: sem capacete / infração, 1: com capacete / seguro)
 nc: 2
 names:
-  0: with_helmet
-  1: without_helmet
+  0: head
+  1: helmet
