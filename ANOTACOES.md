@@ -9,8 +9,8 @@ Neste documento, registro as minhas anotações pessoais de estudo, decisões t�
 Iniciei este projeto com o objetivo de alavancar e praticar meu aprendizado sobre Visão Computacional e IA, desenvolvendo uma solução aplicada à Segurança do Trabalho. O problema central consiste em identificar automaticamente, por meio de imagens e transmissões de vídeo, se pessoas em áreas operacionais ou canteiros de obras estão utilizando o capacete de proteção obrigatório.
 
 Defini o escopo de detecção em duas classes fundamentais:
-* **helmet (classe 0):** Pessoa utilizando capacete de segurança.
-* **no_helmet (classe 1):** Pessoa sem capacete / cabeça desprotegida.
+* **with_helmet (classe 0):** Pessoa utilizando capacete de segurança.
+* **without_helmet (classe 1):** Pessoa sem capacete / cabeça desprotegida.
 
 Optei por um problema binário bem delimitado para garantir maior agilidade na rotulagem, menor necessidade de volume massivo de dados para convergência e foco na precisão das detecções críticas de infração.
 
@@ -30,7 +30,7 @@ Compreendi a distinção entre tarefas de visão:
 * Adotei a estratégia de *Transfer Learning* utilizando o modelo base leve `yolov8n.pt` (YOLOv8 Nano). Dessa forma, aproveito pesos pré-treinados no dataset COCO para extração de características visuais primitivas (bordas, texturas, formas humanas) e realizo o ajuste fino (*fine-tuning*) no meu conjunto de dados específico de capacetes.
 * Estudei as três componentes principais da função de perda da rede:
   * `box_loss`: erro de regressão na precisão das bordas das caixas delimitadoras.
-  * `cls_loss`: erro na classificação correta entre `helmet` e `no_helmet`.
+  * `cls_loss`: erro na classificação correta entre `with_helmet` e `without_helmet`.
   * `dfl_loss` (*Distribution Focal Loss*): refinamento de coordenadas em casos de oclusão e limites difusos.
 
 ### 2.3. Formato de Anotações YOLO
