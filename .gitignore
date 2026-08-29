@@ -20,7 +20,9 @@ __pycache__/
 
 # Visão Computacional, YOLO & PyTorch (Modelos, Datasets e Execuções)
 datasets/
-data/
+data/*
+!data/*/
+!data/**/.gitkeep
 runs/
 weights/
 *.pt
