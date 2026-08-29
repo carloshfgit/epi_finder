@@ -84,14 +84,15 @@ epi_finder/
 ├── data/                  # Conjunto de dados (raw e dataset particionado)
 │   ├── raw/               # Imagens originais baixadas (dados brutos imutáveis)
 │   └── dataset/           # Dataset organizado em train/valid/test (images/ e labels/)
-├── docs/                  # Documentações técnicas e guias
+├── GUIDE.md               # Guia completo do projeto e roadmap
+├── DESCRIPTION.md         # Descrição geral do ecossistema e classes
 ├── notebooks/             # Notebooks de análise exploratória e treinamento
 ├── src/                   # Módulos Python reutilizáveis (utils.py, inference.py)
 ├── models/                # Pesos salvos dos modelos treinados (.pt / .onnx)
 ├── Dockerfile             # Configuração da imagem do container
 ├── docker-compose.yml     # Orquestração do ambiente conteinerizado
 ├── requirements.txt       # Lista de dependências Python
-├── anotacoes.md           # Diário de bordo e anotações de aprendizado
+├── ANOTACOES.md           # Diário de bordo e anotações de aprendizado
 └── .dockerignore / .gitignore
 ```
 
@@ -239,6 +240,21 @@ Para otimizar a regressão das caixas e a classificação simultaneamente, o mod
 1. **`box_loss` (CIoU - Complete IoU):** Avalia a precisão geométrica das caixas delimitadoras, penalizando desvios na sobreposição, distância de centros e proporção de aspecto em relação às marcações reais.
 2. **`cls_loss` (BCE - Binary Cross Entropy):** Penaliza erros de classificação de cada caixa detectada (por exemplo, confundir a cabeça desprotegida `head` com o capacete `helmet`).
 3. **`dfl_loss` (Distribution Focal Loss):** Foca no refinamento das coordenadas de borda da caixa, facilitando a convergência em casos de objetos cortados ou com limites de pixel ambíguos.
+
+### 6.3. Automatização do Pipeline e Práticas de MLOps
+
+Durante o desenvolvimento dos scripts de automação, consolidei aprendizados sobre a transição de um ambiente puramente de pesquisa (Jupyter Notebooks) para um ambiente de engenharia de software e produção (MLOps):
+
+* **Modularização e CLI com `argparse` (`src/train.py`):**
+  * Aprendi a estruturar uma interface de linha de comando robusta que substitui a necessidade de manter navegadores abertos rodando blocos de códigos manuais no Jupyter Lab.
+  * O script detecta automaticamente aceleração de hardware (GPU com CUDA) e parametriza o lote (*batch size*) ideal baseado no processador disponível, tornando as execuções altamente flexíveis.
+  * O uso do parâmetro `--fraction` se provou uma excelente prática para *smoke tests* rápidos (testes de fumaça de 1 época em fração reduzida do dataset), prevenindo erros de sintaxe ou caminhos de arquivo antes de disparar treinamentos de longa duração.
+* **Ciclo de Vida do Modelo e Metadados de Auditoria:**
+  * Compreendi que manter os pesos de modelos binários treinados (`best.pt` e `last.pt`) dispersos em diretórios temporários de logs gera perda de controle histórico. Centralizar os melhores checkpoints na pasta [`models/`](models/) facilita a inferência contínua nas Fases 5 e 6.
+  * Implementei a geração automática de uma "certidão de nascimento" do modelo ([`models/metadata.json`](models/metadata.json)) que lê dinamicamente o histórico de épocas (`results.csv`), encontra o ápice do modelo e registra o carimbo de data/hora, classes mapeadas e as métricas exatas de acurácia.
+* **Estratégia de Controle de Versão (Git vs Big Data):**
+  * Consolei a importância de manter arquivos grandes e binários (como os arquivos de pesos `.pt` de 6MB) de fora do controle de versão tradicional do Git via regras do `.gitignore` (`*.pt`), uma vez que o Git não foi projetado para esse tipo de arquivo.
+  * Versionamos, em contrapartida, os metadados textuais (`metadata.json`) e a documentação dos modelos ([`models/README.md`](models/README.md)), garantindo a rastreabilidade do projeto sem inflar o tamanho do repositório no GitHub.
 
 ---
 
