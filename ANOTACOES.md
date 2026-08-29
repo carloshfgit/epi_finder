@@ -164,7 +164,7 @@ Consolidei as diretrizes fundamentais para garantir datasets de alta qualidade (
 Nesta fase, implementei o pipeline de preparação e realizei uma auditoria estatística profunda do dataset por meio de Análise Exploratória de Dados (EDA), além de desenvolver módulos utilitários em Python para manipulação matricial e cálculo de métricas essenciais.
 
 ### 5.1. Configuração e Padronização do `data/data.yaml`
-* Criei e configurei o arquivo [`data/data.yaml`](file:///home/carloshf/epi_finder/data/data.yaml) para o novo dataset expandido:
+* Criei e configurei o arquivo [`data/data.yaml`](data/data.yaml) para o novo dataset expandido:
   * `path: ../data/dataset`: caminho relativo padronizado para localização das partições.
   * Particionamento completo mapeado: `train: train/images`, `val: valid/images` e `test: test/images`.
   * Mapeamento binário das classes do novo dataset:
@@ -172,7 +172,7 @@ Nesta fase, implementei o pipeline de preparação e realizei uma auditoria esta
     * `1: helmet` (com capacete de proteção — classe conforme/seguro).
 
 ### 5.2. Resultados e Diagnósticos da Análise Exploratória do Novo Dataset (Pandas)
-No notebook [`notebooks/01_eda_dataset.ipynb`](file:///home/carloshf/epi_finder/notebooks/01_eda_dataset.ipynb), estruturei dois DataFrames (`df_annotations` e `df_images`) que revelaram o salto de qualidade do novo dataset:
+No notebook [`notebooks/01_eda_dataset.ipynb`](notebooks/01_eda_dataset.ipynb), estruturei dois DataFrames (`df_annotations` e `df_images`) que revelaram o salto de qualidade do novo dataset:
 
 1. **Volume Geral e Particionamento:**
    * **Total de imagens:** **946 imagens** (831 em treino - 87,8%, 76 em validação - 8,0% e 39 em teste - 4,1%).
@@ -198,7 +198,7 @@ Durante a construção do notebook e dos utilitários, pratiquei operações vet
 * **Implementação do IoU (Intersection over Union) do Zero:** Desenvolvi a função matemática do IoU utilizando `np.maximum` e `np.minimum` para calcular as coordenadas e áreas da caixa de interseção e da união, validando matematicamente sobreposições totais ($1.0$), parciais e disjuntas ($0.0$).
 
 ### 5.4. Modularização em `src/utils.py`
-Para garantir reusabilidade de código e evitar dependência de funções isoladas em notebooks, mantive o módulo [`src/utils.py`](file:///home/carloshf/epi_finder/src/utils.py) atualizado com as classes e cores:
+Para garantir reusabilidade de código e evitar dependência de funções isoladas em notebooks, mantive o módulo [`src/utils.py`](src/utils.py) atualizado com as classes e cores:
 * `DEFAULT_CLASSES`: `{0: "head", 1: "helmet"}`
 * `CLASS_COLORS_BGR`: `0: (0, 0, 255)` (Vermelho - Alerta) e `1: (0, 255, 0)` (Verde - Seguro).
 * Funções: `yolo_to_xyxy()`, `xyxy_to_yolo()`, `compute_iou()`, `compute_iou_matrix()`, `extract_roi()`, `bgr_to_rgb()`, `normalize_image()`, `load_yolo_annotation()`, `draw_bounding_boxes()`.
@@ -209,16 +209,49 @@ Para garantir reusabilidade de código e evitar dependência de funções isolad
 
 ---
 
-## 6. Próximos Passos (Fase 4: Treinamento e Experimentos)
+## 6. Fase 4: Treinamento e Experimentos (YOLOv8)
 
-Com o novo dataset 100% auditado e organizado:
-1. **Notebook de Treinamento (`notebooks/02_training_yolov8.ipynb`):**
-   * Configurar hiperparâmetros de fine-tuning utilizando pesos pré-treinados do `yolov8n.pt`.
-   * Definir epochs, batch size, tamanho da imagem (640x640) e monitoramento de perdas (`box_loss`, `cls_loss`, `dfl_loss`).
-2. **Execução do Treinamento:**
-   * Rodar o treino via GPU/CPU dentro do container Docker e registrar artefatos em `runs/detect/`.
-3. **Fase 5 (Avaliação & Métricas):**
-   * Analisar curvas de precisão-revocação, matriz de confusão e evolução do mAP@50 no split de teste.
+Nesta fase, estruturei as bases para o treinamento do detector binário utilizando Transfer Learning e consolidei os aspectos teóricos fundamentais que regem a otimização do modelo YOLOv8.
+
+### 6.1. Racional de Escolha dos Hiperparâmetros de Treinamento
+
+Abaixo estão descritos os hiperparâmetros definidos para o treinamento no notebook [`notebooks/02_training_yolov8.ipynb`](notebooks/02_training_yolov8.ipynb) e suas respectivas justificativas técnicas:
+
+* **Modelo Base (`yolov8n.pt`):**
+  * **Teoria:** O modelo Nano possui cerca de 3.2M parâmetros. Atua como extrator de características visuais primitivas (bordas, texturas, formas humanas) pré-treinadas no dataset COCO.
+  * **Justificativa:** É a versão mais leve e rápida do YOLOv8, o que viabiliza o treinamento e a inferência rápida tanto em CPU (caso do container atual sem suporte a CUDA) quanto em dispositivos de borda e câmeras em tempo real.
+* **Resolução da Imagem (`imgsz=640`):**
+  * **Teoria:** O redimensionamento padroniza a entrada da rede convolucional. O YOLOv8 foi concebido e otimizado nativamente para imagens $640 \times 640$.
+  * **Justificativa:** Preserva o detalhamento geométrico de objetos pequenos (como capacetes vistos de média/longa distância) sem encarecer o processamento e uso de memória.
+* **Número de Épocas (`epochs=50`):**
+  * **Teoria:** Representa o número total de passagens completas do conjunto de treino pela rede neural.
+  * **Justificativa:** Em datasets de tamanho intermediário (~1000 imagens), 50 épocas fornecem uma janela de tempo ideal para convergência estável das perdas sem induzir o modelo ao *overfitting*.
+* **Tamanho do Lote (`batch=16` ou `8`):**
+  * **Teoria:** Quantidade de imagens enviadas à rede em paralelo para cálculo do gradiente e atualização dos pesos.
+  * **Justificativa:** O lote de 16 (ou 8 em CPU para evitar estouro de memória RAM) equilibra a estabilidade matemática do gradiente com a restrição física de memória do container Docker.
+* **Paciência / Early Stopping (`patience=15`):**
+  * **Teoria:** Interrompe as épocas se a perda de validação parar de melhorar por $N$ épocas consecutivas.
+  * **Justificativa:** Evita o desperdício de tempo de CPU/GPU e preserva os melhores pesos salvos no checkpoint (`best.pt`) antes que o modelo comece a decorar o dataset de treino.
+
+### 6.2. Componentes da Função de Perda (Loss Functions) do YOLOv8
+
+Para otimizar a regressão das caixas e a classificação simultaneamente, o modelo monitora três perdas matemáticas:
+1. **`box_loss` (CIoU - Complete IoU):** Avalia a precisão geométrica das caixas delimitadoras, penalizando desvios na sobreposição, distância de centros e proporção de aspecto em relação às marcações reais.
+2. **`cls_loss` (BCE - Binary Cross Entropy):** Penaliza erros de classificação de cada caixa detectada (por exemplo, confundir a cabeça desprotegida `head` com o capacete `helmet`).
+3. **`dfl_loss` (Distribution Focal Loss):** Foca no refinamento das coordenadas de borda da caixa, facilitando a convergência em casos de objetos cortados ou com limites de pixel ambíguos.
+
+---
+
+## 7. Próximos Passos (Fase 5: Avaliação & Métricas e Fase 6: Aplicação de Inferência)
+
+1. **Executar o Treinamento Completo:** Disparar o ciclo de épocas e monitorar as perdas registradas em `runs/detect/`.
+2. **Fase 5 (Avaliação & Métricas):**
+   - Importar o `results.csv` para análise profunda com Pandas.
+   - Avaliar as curvas de Precisão-Revocação (PR), F1-Score e a Matriz de Confusão no split de teste cego.
+3. **Fase 6 (Inferência & Relatório):**
+   - Construir o script `src/inference.py` com OpenCV para desenhar caixas coloridas (verde para seguro, vermelho para perigo).
+   - Gerar relatórios automatizados de conformidade em formato CSV.
+
 
 
 
