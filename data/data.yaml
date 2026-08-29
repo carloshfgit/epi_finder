@@ -1,0 +1,13 @@
+# Configuração do Dataset - EPI Finder (YOLOv8)
+# Estrutura: data/dataset/{train,valid,test}/{images,labels}
+
+path: ../data/dataset
+train: train/images
+val: valid/images
+test: valid/images  # O split do Roboflow foi exportado em 80% train / 20% valid
+
+# Classes do modelo
+nc: 2
+names:
+  0: with_helmet
+  1: without_helmet

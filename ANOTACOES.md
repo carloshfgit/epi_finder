@@ -159,14 +159,70 @@ Consolidei as diretrizes fundamentais para garantir datasets de alta qualidade (
 ---
 
 
-## 5. Próximos Passos (Fase 3: Pipeline & EDA)
+## 5. Fase 3: Pipeline de Dados, Análise Exploratória (EDA) e Visão Computacional com NumPy & Pandas
 
-Com a Fase 2 (Coleta e Rotulagem) totalmente concluída, o foco agora é a **Fase 3**:
-1. **Configuração do `data/data.yaml`:** Criar/ajustar o arquivo principal de dados na raiz de `data/` apontando os caminhos absolutos ou relativos para o dataset.
-2. **Análise Exploratória de Dados (EDA com Pandas & NumPy):** Criar o notebook `notebooks/01_eda_dataset.ipynb` para:
-   * Ler os arquivos `.txt` de anotações em um `pandas.DataFrame`.
-   * Verificar a distribuição de contagem de cada classe (`with_helmet` vs `without_helmet`).
-   * Calcular estatísticas das caixas (largura, altura, área, aspect ratio) usando NumPy.
-3. **Fase 4 (Treinamento):** Iniciar o ajuste fino do modelo `yolov8n.pt`.
+Nesta fase, implementei o pipeline de preparação e realizei uma auditoria estatística profunda do dataset por meio de Análise Exploratória de Dados (EDA), além de desenvolver módulos utilitários em Python para manipulação matricial e cálculo de métricas essenciais.
+
+### 5.1. Configuração e Padronização do `data/data.yaml`
+* Criei o arquivo de configuração [`data/data.yaml`](file:///home/carloshf/epi_finder/data/data.yaml), estabelecendo o contrato de treinamento para o YOLOv8:
+  * `path: ../data/dataset`: caminho relativo padronizado para localização das partições.
+  * `train: train/images` e `val: valid/images`.
+  * `test: valid/images`: configurado temporariamente apontando para a validação, uma vez que o split exportado do Roboflow Universe distribuiu 100% das imagens entre Treino e Validação (80% / 20%).
+  * Mapeamento binário das classes: `0: with_helmet` e `1: without_helmet`.
+
+### 5.2. Resultados e Diagnósticos da Análise Exploratória (Pandas)
+No notebook [`notebooks/01_eda_dataset.ipynb`](file:///home/carloshf/epi_finder/notebooks/01_eda_dataset.ipynb), estruturei dois DataFrames (`df_annotations` e `df_images`) que revelaram métricas fundamentais sobre a integridade e características do dataset:
+
+1. **Volume Geral e Particionamento:**
+   * **Total de imagens:** 442 (354 em treino e 88 em validação — proporção exata de 80.1% / 19.9%).
+   * **Total de instâncias anotadas:** 623 caixas delimitadoras (508 em treino e 115 em validação).
+
+2. **Severo Desbalanceamento de Classes:**
+   * **`with_helmet` (classe 0):** 590 anotações (**94,70%**).
+   * **`without_helmet` (classe 1):** 33 anotações (**5,30%**).
+   * No conjunto de treino: 481 com capacete vs. 27 sem capacete.
+   * No conjunto de validação: 109 com capacete vs. 6 sem capacete.
+
+3. **Presença de Infrações por Imagem:**
+   * Apenas **33 imagens** de todo o dataset (7,47%) contêm pessoas sem capacete. As outras 409 imagens (92,53%) possuem somente trabalhadores em conformidade.
+
+4. **Distribuição Geométrica das Caixas:**
+   * **Área normalizada média:** $0,0269$ (~2,7% da imagem total), caracterizando objetos de porte pequeno a médio no campo de visão.
+   * **Proporção média (Aspect Ratio $W/H$):** $0,855$, confirmando caixas ligeiramente mais altas do que largas, correspondente à anatomia da cabeça e pescoço humanos.
+
+### 5.3. Aprendizados Práticos de Manipulação Matricial com NumPy
+Durante a construção do notebook e dos utilitários, pratiquei operações vetoriais de baixo nível fundamentais para Visão Computacional:
+* **Conversão de Coordenadas YOLO $\leftrightarrow$ Pixels:** Implementei a conversão entre coordenadas normalizadas relativas ao centro $[x_{center}, y_{center}, w, h]$ e coordenadas absolutas de cantos $[x_1, y_1, x_2, y_2]$ delimitadas pela resolução da imagem.
+* **Recorte de Região de Interesse (ROI):** Pratiquei a extração de recortes da cabeça/capacete diretamente da matriz da imagem via fatiamento NumPy (`img[y1:y2, x1:x2]`).
+* **Canais de Cores e Escala:** Conversão rápida do padrão BGR (OpenCV) para RGB (Matplotlib/PyTorch) usando inversão do terceiro eixo (`img[:, :, ::-1]`) e normalização matemática dos pixels para `float32` no intervalo $[0.0, 1.0]$.
+* **Implementação do IoU (Intersection over Union) do Zero:** Desenvolvi a função matemática do IoU utilizando `np.maximum` e `np.minimum` para calcular as coordenadas e áreas da caixa de interseção e da união, validando matematicamente sobreposições totais ($1.0$), parciais e disjuntas ($0.0$).
+
+### 5.4. Modularização em `src/utils.py`
+Para garantir reusabilidade de código e evitar dependência de funções isoladas em notebooks, criei o módulo [`src/utils.py`](file:///home/carloshf/epi_finder/src/utils.py), contendo:
+* `yolo_to_xyxy()` e `xyxy_to_yolo()`
+* `compute_iou()` e `compute_iou_matrix()` (com broadcasting NumPy)
+* `extract_roi()`, `bgr_to_rgb()` e `normalize_image()`
+* `load_yolo_annotation()`
+* `draw_bounding_boxes()` com identificação por cores: **Verde** para seguro (`with_helmet`) e **Vermelho** para perigo (`without_helmet`).
+
+### 5.5. Impactos Estratégicos para a Fase 4 (Treinamento)
+A EDA trouxe diagnósticos cruciais que orientarão as decisões no treinamento do YOLOv8:
+* **Acurácia Global é Enganosa:** Como 94,7% das caixas são de trabalhadores com capacete, um modelo que nunca detecte nenhuma infração ainda atingiria quase 95% de precisão geral aparente.
+* **Métrica-Chave:** No treinamento, a prioridade absoluta deve ser o **Recall** e o **mAP@50** específicos da classe `without_helmet`. Não podemos permitir que o modelo deixe de alarmar trabalhadores expostos ao perigo (falsos negativos são críticos).
+* **Data Augmentation:** As técnicas de aumento de dados embutidas no YOLO (Mosaic, MixUp, Random Flipping) serão essenciais para enriquecer a diversidade dos poucos exemplos de infração disponíveis.
+
+---
+
+## 6. Próximos Passos (Fase 4: Treinamento e Experimentos)
+
+Com a Fase 3 integralmente concluída e o dataset auditado:
+1. **Notebook de Treinamento (`notebooks/02_training_yolov8.ipynb`):**
+   * Configurar hiperparâmetros de fine-tuning utilizando pesos pré-treinados do `yolov8n.pt`.
+   * Definir epochs, batch size, tamanho da imagem (640x640) e monitoramento de perdas (`box_loss`, `cls_loss`, `dfl_loss`).
+2. **Execução do Treinamento:**
+   * Rodar o treino via GPU/CPU dentro do container Docker e registrar artefatos em `runs/detect/`.
+3. **Fase 5 (Avaliação & Métricas):**
+   * Analisar curvas de precisão-revocação, matriz de confusão e evolução do mAP por classe.
+
 
 
