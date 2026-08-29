@@ -266,6 +266,7 @@ Ao processar vídeos contínuos de câmeras:
 3. [x] Obter anotações das classes (`head` / `helmet`) via Roboflow.
 4. [x] Exportar dataset em formato YOLOv8 e descompactar em `data/dataset/`.
 5. [x] Configurar `data/data.yaml` e executar Análise Exploratória (EDA) com Pandas/NumPy.
-6. [ ] Executar primeiro treino de baseline com `yolov8n.pt`.
-7. [ ] Validar métricas e construir o script de inferência com alertas visuais (`src/inference.py`).
+6. [x] Executar primeiro treino de baseline com `yolov8n.pt` e estruturar metadados do modelo.
+7. [x] Validar métricas cegas, estruturar script modular de avaliação (`src/evaluate.py`) e notebook analítico (`notebooks/03_model_evaluation.ipynb`).
+8. [ ] Construir o script de inferência operacional com alertas visuais (`src/inference.py`) e relatórios de conformidade (Fase 6).
 

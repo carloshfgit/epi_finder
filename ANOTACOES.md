@@ -258,15 +258,63 @@ Durante o desenvolvimento dos scripts de automação, consolidei aprendizados so
 
 ---
 
-## 7. Próximos Passos (Fase 5: Avaliação & Métricas e Fase 6: Aplicação de Inferência)
+## 7. Fase 5: Avaliação de Modelo, Métricas e Diagnósticos de SST (Pandas & MLOps)
 
-1. **Executar o Treinamento Completo:** Disparar o ciclo de épocas e monitorar as perdas registradas em `runs/detect/`.
-2. **Fase 5 (Avaliação & Métricas):**
-   - Importar o `results.csv` para análise profunda com Pandas.
-   - Avaliar as curvas de Precisão-Revocação (PR), F1-Score e a Matriz de Confusão no split de teste cego.
-3. **Fase 6 (Inferência & Relatório):**
-   - Construir o script `src/inference.py` com OpenCV para desenhar caixas coloridas (verde para seguro, vermelho para perigo).
-   - Gerar relatórios automatizados de conformidade em formato CSV.
+Nesta fase, consolidei meus aprendizados teóricos e práticos sobre avaliação e diagnóstico de modelos de detecção de objetos, integrando engenharia de software com os requisitos do domínio de Segurança e Saúde no Trabalho (SST).
+
+### 7.1. Fundamentos Matemáticos das Métricas de Detecção
+
+Aprofundei os conceitos matemáticos que regem a auditoria de detectores de objetos, diferenciando-os de problemas de classificação pura:
+
+*   **IoU (Intersection over Union / Interseção sobre União):**
+    *   Mede o alinhamento geométrico entre a caixa prevista ($B_{pred}$) e a caixa real de gabarito ($B_{gt}$).
+    *   $$IoU = \frac{\text{Área}(B_{pred} \cap B_{gt})}{\text{Área}(B_{pred} \cup B_{gt})}$$
+    *   Um limiar de IoU (tipicamente $0.50$ ou $0.60$) é usado para determinar se uma detecção é um Verdadeiro Positivo (TP) ou um Falso Positivo (FP).
+*   **Precision (Precisão):**
+    *   Mede a exatidão das detecções da IA.
+    *   $$\text{Precision} = \frac{TP}{TP + FP}$$
+    *   No contexto de SST, uma precisão de $95\%$ para a classe `head` significa que apenas $5\%$ dos alertas de "Sem Capacete" emitidos pela IA serão alarmes falsos.
+*   **Recall (Revocação / Sensibilidade):**
+    *   Mede a taxa de captura de objetos reais.
+    *   $$\text{Recall} = \frac{TP}{TP + FN}$$
+    *   No contexto de SST, se o Recall para a classe `head` for $80\%$, significa que a IA deixa passar $20\%$ de pessoas desprotegidas no canteiro de obras (Falsos Negativos), gerando risco de acidentes severos.
+*   **mAP (Mean Average Precision):**
+    *   **$mAP@50$:** A precisão média calculada sobre a curva Precision-Recall sob um limiar fixo de $IoU = 0.50$.
+    *   **$mAP@50\text{-}95$:** A média do mAP calculado sob dez limiares de IoU espaçados de $0.05$ (ou seja, $[0.50, 0.55, \dots, 0.95]$). Esta é a métrica mais rigorosa, avaliando tanto a classe quanto a precisão do encaixe geométrico das caixas.
+
+### 7.2. O Trade-off de Segurança e Saúde no Trabalho (SST)
+
+Compreendi a importância de alinhar as métricas de Machine Learning com o valor de negócio e segurança humana:
+1.  **Custo da Omissão (Falso Negativo - FN):**
+    *   Um trabalhador sem capacete não é detectado. É a falha mais grave, pois coloca vidas em risco e expõe a empresa a responsabilidades legais e multas trabalhistas (NR-6).
+    *   **Diretriz:** Devemos tolerar uma Precision ligeiramente menor (mais alarmes falsos) em troca de um **Recall próximo a 100%** para a classe `head`.
+2.  **Custo do Alarme Falso (Falso Positivo - FP):**
+    *   Um trabalhador com capacete (ou um objeto qualquer do canteiro) é erroneamente classificado como desprotegido. Gera interrupções operacionais e a "fadiga de alarmes" nos operadores humanos do CFTV.
+
+### 7.3. Matriz de Confusão em Detecção de Objetos vs. Classificação
+
+Entendi a sutil diferença na matriz de confusão para detectores de objetos:
+*   A matriz possui uma dimensão adicional: a classe **Background (Fundo)**.
+*   Se um objeto real não for detectado pela IA, ele é contabilizado na linha de predição do *Background* (Falso Negativo).
+*   Se a IA detectar uma caixa onde não existe nenhum objeto correspondente nas marcações humanas, essa detecção é jogada na coluna de marcação real do *Background* (Falso Positivo).
+
+### 7.4. MLOps e Engenharia: O Módulo `src/evaluate.py` e Notebook 03
+
+Consolidei a importância de ferramentas padronizadas para análise de dados e MLOps:
+*   **Pandas para Diagnóstico Temporal:**
+    *   Utilizamos a biblioteca Pandas para abrir o `results.csv` gerado pelas épocas de treino. Isso nos permitiu filtrar a época de maior generalização (ápice do mAP) e cruzar com a curva de perda de validação, identificando se houve ou não *overfitting*.
+*   **Automação CLI:**
+    *   O script [`src/evaluate.py`](src/evaluate.py) separa o ciclo de desenvolvimento (Jupyter Lab) da execução em produção, permitindo disparar avaliações automatizadas a partir de pipelines CI/CD ou scripts bash e salvando metadados consolidados no arquivo [`models/test_metrics.json`](models/test_metrics.json).
+*   **Auditoria de Erros Visual (Error Analysis):**
+    *   O notebook [`notebooks/03_model_evaluation.ipynb`](notebooks/03_model_evaluation.ipynb) permitiu ir além dos números, inspecionando lado a lado imagens reais com gabaritos versus previsões da IA. Isso ajuda a identificar padrões de erro, como a confusão entre bonés ou reflexos com a classe `head`.
+
+---
+
+## 8. Próximos Passos (Fase 6: Inferência & Relatórios)
+
+1.  **Construção do Script de Inferência Operacional:** Desenvolver o script `src/inference.py` com OpenCV para suporte a feeds de vídeo em tempo real ou arquivos de vídeo.
+2.  **Alertas Visuais Dinâmicos:** Renderizar caixas vermelhas com tag `"ALERTA: SEM CAPACETE"` e verdes com tag `"Capacete"`.
+3.  **Relatório de Conformidade:** Gerar logs estruturados com data/hora das infrações salvas em CSV via Pandas para posterior auditoria da segurança do trabalho.
 
 
 
