@@ -9,8 +9,8 @@ Neste documento, registro as minhas anotações pessoais de estudo, decisões t�
 Iniciei este projeto com o objetivo de alavancar e praticar meu aprendizado sobre Visão Computacional e IA, desenvolvendo uma solução aplicada à Segurança do Trabalho. O problema central consiste em identificar automaticamente, por meio de imagens e transmissões de vídeo, se pessoas em áreas operacionais ou canteiros de obras estão utilizando o capacete de proteção obrigatório.
 
 Defini o escopo de detecção em duas classes fundamentais:
-* **with_helmet (classe 0):** Pessoa utilizando capacete de segurança.
-* **without_helmet (classe 1):** Pessoa sem capacete / cabeça desprotegida.
+* **head (classe 0):** Pessoa sem capacete / cabeça desprotegida (infração / alerta).
+* **helmet (classe 1):** Pessoa utilizando capacete de segurança (conforme / seguro).
 
 Optei por um problema binário bem delimitado para garantir maior agilidade na rotulagem, menor necessidade de volume massivo de dados para convergência e foco na precisão das detecções críticas de infração.
 
@@ -30,7 +30,7 @@ Compreendi a distinção entre tarefas de visão:
 * Adotei a estratégia de *Transfer Learning* utilizando o modelo base leve `yolov8n.pt` (YOLOv8 Nano). Dessa forma, aproveito pesos pré-treinados no dataset COCO para extração de características visuais primitivas (bordas, texturas, formas humanas) e realizo o ajuste fino (*fine-tuning*) no meu conjunto de dados específico de capacetes.
 * Estudei as três componentes principais da função de perda da rede:
   * `box_loss`: erro de regressão na precisão das bordas das caixas delimitadoras.
-  * `cls_loss`: erro na classificação correta entre `with_helmet` e `without_helmet`.
+  * `cls_loss`: erro na classificação correta entre `head` e `helmet`.
   * `dfl_loss` (*Distribution Focal Loss*): refinamento de coordenadas em casos de oclusão e limites difusos.
 
 ### 2.3. Formato de Anotações YOLO
@@ -145,12 +145,12 @@ Consolidei as diretrizes fundamentais para garantir datasets de alta qualidade (
 4. **Auto-Rotulagem Assistida por IA (*AI-Assisted Labeling / Human-in-the-Loop*):** Uso de modelos pré-treinados ou modelos de segmentação para gerar caixas prévias automaticamente, reduzindo até 80% do esforço manual, com o operador humano atuando na revisão e ajuste fino das caixas.
 
 ### 4.4. Conclusão da Fase 2 e Estrutura do Dataset Baixado
-* **Dataset Selecionado:** `hard-hat-detection` (Roboflow Universe, versão em formato YOLOv8).
+* **Dataset Selecionado:** `hard-hat-detection-v2` (Roboflow Universe, versão em formato YOLOv8).
 * **Localização no Projeto:** Baixado e descompactado com sucesso em [`data/dataset/`].
-* **Particionamento Obtido:** Pastas `train/`, `valid/` e `test/` prontas com subpastas `images/` e `labels/`.
+* **Particionamento Obtido:** Pastas `train/`, `valid/` e `test/` prontas com subpastas `images/` e `labels/` totalizando 946 imagens.
 * **Classes Mapeadas no `data.yaml`:**
-  * `0`: `with_helmet` (com capacete de proteção)
-  * `1`: `without_helmet` (sem capacete / cabeça visível)
+  * `0`: `head` (sem capacete / cabeça visível — infração / alerta)
+  * `1`: `helmet` (com capacete de proteção — conforme / seguro)
 
 ### 4.5. Entendimento sobre Extração e Divisão do Dataset (Train / Valid / Test)
 * **Preservação da Hierarquia ao Descompactar:** Entendi que ao exportar um dataset no formato **YOLOv8** do Roboflow, o arquivo `.zip` já é montado na nuvem contendo a árvore interna de pastas (`train/`, `valid/`, `test/`, cada uma com subpastas `images/` e `labels/`). A ação de descompactar apenas extrai essa estrutura pré-existente para o diretório de destino.

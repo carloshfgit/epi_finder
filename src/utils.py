@@ -262,8 +262,8 @@ def draw_bounding_boxes(
 ) -> np.ndarray:
     """
     Desenha caixas delimitadoras e etiquetas na imagem utilizando OpenCV.
-    - with_helmet (0): Caixa e texto em Verde.
-    - without_helmet (1): Caixa e texto em Vermelho.
+    - head (0): Caixa e texto em Vermelho (Infração / Alerta).
+    - helmet (1): Caixa e texto em Verde (Seguro / Conforme).
 
     Args:
         image: Imagem de entrada em formato BGR.
