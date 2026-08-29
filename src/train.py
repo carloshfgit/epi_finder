@@ -6,12 +6,15 @@ Transfer Learning com a arquitetura YOLOv8 da Ultralytics.
 """
 
 import argparse
+from datetime import datetime
+import json
 import os
 from pathlib import Path
 import shutil
 import sys
 from typing import Any, Dict, Optional
 
+import pandas as pd
 import torch
 from ultralytics import YOLO
 from ultralytics.data.utils import check_det_dataset
@@ -145,21 +148,68 @@ def train_yolo(
     if last_weights_path.exists():
         print(f"💾 Últimos pesos salvos em  : {last_weights_path}")
 
-    # Cópia opcional para models/
+    # Cópia e organização profissional para models/
     if copy_to_models and best_weights_path.exists():
         models_dir = Path("models").resolve()
         models_dir.mkdir(parents=True, exist_ok=True)
 
         dest_best = models_dir / "best.pt"
         dest_named = models_dir / f"{experiment_name}_best.pt"
-
         shutil.copy2(best_weights_path, dest_best)
         shutil.copy2(best_weights_path, dest_named)
 
-        print(f"📦 Pesos exportados para deploy:")
-        print(f"   - {dest_best}")
+        dest_last = models_dir / "last.pt"
+        if last_weights_path.exists():
+            shutil.copy2(last_weights_path, dest_last)
+
+        print("📦 Pesos organizados e exportados para models/:")
+        print(f"   - {dest_best} (Melhor modelo para inferência/deploy)")
         print(f"   - {dest_named}")
+        if dest_last.exists():
+            print(f"   - {dest_last} (Último checkpoint para retomada)")
         output_summary["exported_best"] = str(dest_best)
+
+        # Extração de métricas da melhor época via results.csv
+        results_csv = exp_dir / "results.csv"
+        metadata: Dict[str, Any] = {
+            "model_name": experiment_name,
+            "base_model": base_model,
+            "training_date": datetime.now().isoformat(),
+            "epochs_configured": epochs,
+            "batch_size": batch_size,
+            "image_size": img_size,
+            "device": active_device,
+            "classes": dataset_info.get("names", {}),
+            "weights": {
+                "best": str(dest_best.relative_to(Path.cwd())) if dest_best.is_relative_to(Path.cwd()) else str(dest_best),
+                "last": str(dest_last.relative_to(Path.cwd())) if dest_last.exists() and dest_last.is_relative_to(Path.cwd()) else str(dest_last),
+            },
+        }
+
+        if results_csv.exists():
+            try:
+                df = pd.read_csv(results_csv)
+                df.columns = [c.strip() for c in df.columns]
+                map50_col = "metrics/mAP50(B)" if "metrics/mAP50(B)" in df.columns else "metrics/mAP50"
+                if map50_col in df.columns and not df.empty:
+                    best_row_idx = df[map50_col].idxmax()
+                    best_row = df.loc[best_row_idx]
+                    metadata["best_epoch"] = int(best_row["epoch"])
+                    metadata["best_metrics"] = {
+                        "mAP50": float(best_row[map50_col]),
+                        "mAP50-95": float(best_row.get("metrics/mAP50-95(B)", best_row.get("metrics/mAP50-95", 0.0))),
+                        "precision": float(best_row.get("metrics/precision(B)", best_row.get("metrics/precision", 0.0))),
+                        "recall": float(best_row.get("metrics/recall(B)", best_row.get("metrics/recall", 0.0))),
+                    }
+                    print(f"🏆 Melhor Época Registrada: {metadata['best_epoch']} com mAP@50 = {metadata['best_metrics']['mAP50']:.4f}")
+            except Exception as meta_err:
+                print(f"⚠️ Não foi possível extrair métricas de {results_csv}: {meta_err}")
+
+        # Salva o arquivo metadata.json
+        meta_file = models_dir / "metadata.json"
+        meta_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"📄 Metadados do modelo salvos em : {meta_file}")
+        output_summary["metadata_file"] = str(meta_file)
 
     results_csv = exp_dir / "results.csv"
     if results_csv.exists():
@@ -248,7 +298,7 @@ def parse_args() -> argparse.Namespace:
         "--fraction",
         type=float,
         default=None,
-        help="Fração do dataset a utilizar (ex: 0.05 para 5%), útil para testes rápidos/smoke tests",
+        help="Fração do dataset a utilizar (ex: 0.05 para 5%%), útil para testes rápidos/smoke tests",
     )
     return parser.parse_args()
 
