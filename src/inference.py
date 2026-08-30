@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple, Union
 
 # Garante que a raiz do projeto esteja no sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -885,6 +885,381 @@ def run_inference(
         print(f"🎯 Confiança Média        : {summary['mean_confidence']:.2f}")
         print(f"📢 Status Operacional     : {summary['status']}")
         print("=" * 78)
+
+    return auditor
+
+
+def load_model(weights: Union[str, Path] = "models/best.pt") -> YOLO:
+    """
+    Carrega o modelo YOLOv8 a partir de arquivo de pesos local com fallback seguro.
+
+    Args:
+        weights: Caminho para os pesos .pt do modelo.
+
+    Returns:
+        Instância do modelo YOLO carregado.
+    """
+    weights_path = Path(weights).resolve()
+    if not weights_path.exists():
+        fallback_weights = PROJECT_ROOT / "yolov8n.pt"
+        if fallback_weights.exists():
+            weights_path = fallback_weights
+        else:
+            fallback_cwd = Path("yolov8n.pt").resolve()
+            if fallback_cwd.exists():
+                weights_path = fallback_cwd
+            else:
+                raise FileNotFoundError(f"Pesos de modelo não encontrados: {weights}")
+    return YOLO(str(weights_path))
+
+
+def infer_single_image(
+    model: YOLO,
+    image_bgr: np.ndarray,
+    conf_threshold: float = 0.25,
+    iou_threshold: float = 0.45,
+    img_size: int = 640,
+    device: Optional[str] = None,
+    alert_labels: bool = True,
+    draw_banner: bool = True,
+    camera_id: str = "Camera-01",
+) -> Dict[str, Any]:
+    """
+    Executa inferência rápida em uma única imagem (formato BGR).
+
+    Retorna a imagem anotada com bounding boxes estilizadas, painel de telemetria,
+    contagem de detecções e lista de recortes das infrações para apresentação
+    imediata em interfaces interativas (Streamlit).
+
+    Args:
+        model: Instância de ultralytics.YOLO.
+        image_bgr: Array NumPy da imagem em formato BGR (OpenCV).
+        conf_threshold: Limiar de confiança para detecção.
+        iou_threshold: Limiar de IoU (NMS).
+        img_size: Tamanho de entrada para inferência da rede.
+        device: Dispositivo de execução ('0' ou 'cpu').
+        alert_labels: Se True, utiliza descrições focadas em SST (ALERTA: SEM CAPACETE).
+        draw_banner: Se True, sobrepõe a barra de telemetria superior.
+        camera_id: Identificador do local/câmera.
+
+    Returns:
+        Dicionário com imagem anotada (BGR e RGB), caixas, contagens e recortes.
+    """
+    active_device = device if device is not None else get_default_device()
+    labels_map = ALERT_CLASSES if alert_labels else DEFAULT_CLASSES
+    now_ts = datetime.now()
+
+    results = model.predict(
+        source=image_bgr,
+        conf=conf_threshold,
+        iou=iou_threshold,
+        imgsz=img_size,
+        device=active_device,
+        verbose=False,
+    )
+
+    boxes_xyxy: List[Tuple[int, int, int, int]] = []
+    class_ids: List[int] = []
+    confidences: List[float] = []
+    detections: List[Dict[str, Any]] = []
+    violation_crops: List[Dict[str, Any]] = []
+
+    for r in results:
+        if r.boxes is not None and len(r.boxes) > 0:
+            b_arr = r.boxes.xyxy.cpu().numpy()
+            c_arr = r.boxes.cls.cpu().numpy().astype(int)
+            conf_arr = r.boxes.conf.cpu().numpy()
+
+            for idx, (b, c, cf) in enumerate(zip(b_arr, c_arr, conf_arr), start=1):
+                box_tuple = (int(b[0]), int(b[1]), int(b[2]), int(b[3]))
+                c_int = int(c)
+                cf_float = float(cf)
+
+                boxes_xyxy.append(box_tuple)
+                class_ids.append(c_int)
+                confidences.append(cf_float)
+
+                class_name = DEFAULT_CLASSES.get(c_int, f"class_{c_int}")
+                is_violation = (c_int == 0)
+
+                det_dict = {
+                    "detection_id": idx,
+                    "class_id": c_int,
+                    "class_name": class_name,
+                    "confidence": round(cf_float, 4),
+                    "bbox_xyxy": box_tuple,
+                    "is_violation": is_violation,
+                }
+                detections.append(det_dict)
+
+                if is_violation:
+                    crop_bgr = extract_roi(image_bgr, box_tuple)
+                    if crop_bgr.size > 0:
+                        crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
+                        violation_crops.append({
+                            "detection_id": idx,
+                            "crop_bgr": crop_bgr,
+                            "crop_rgb": crop_rgb,
+                            "confidence": round(cf_float, 4),
+                            "bbox_xyxy": box_tuple,
+                        })
+
+    total_persons = len(class_ids)
+    conformant_count = sum(1 for c in class_ids if c == 1)
+    violation_count = sum(1 for c in class_ids if c == 0)
+    compliance_rate = (
+        (conformant_count / total_persons * 100.0) if total_persons > 0 else 100.0
+    )
+
+    annotated_bgr = image_bgr.copy()
+    if boxes_xyxy:
+        annotated_bgr = draw_bounding_boxes(
+            image=annotated_bgr,
+            boxes_xyxy=boxes_xyxy,
+            class_ids=class_ids,
+            confidences=confidences,
+            class_names=labels_map,
+            track_ids=None,
+            thickness=2,
+        )
+
+    if draw_banner:
+        annotated_bgr = draw_telemetry_banner(
+            image=annotated_bgr,
+            total_persons=total_persons,
+            conformant_count=conformant_count,
+            violation_count=violation_count,
+            compliance_rate=compliance_rate,
+            camera_id=camera_id,
+            timestamp_str=now_ts.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
+
+    return {
+        "annotated_bgr": annotated_bgr,
+        "annotated_rgb": annotated_rgb,
+        "detections": detections,
+        "boxes_xyxy": boxes_xyxy,
+        "class_ids": class_ids,
+        "confidences": confidences,
+        "total_persons": total_persons,
+        "conformant_count": conformant_count,
+        "violation_count": violation_count,
+        "compliance_rate_percent": round(compliance_rate, 1),
+        "violation_crops": violation_crops,
+    }
+
+
+def process_video_stream(
+    video_source: Union[str, Path, int],
+    model: YOLO,
+    conf_threshold: float = 0.25,
+    iou_threshold: float = 0.45,
+    img_size: int = 640,
+    device: Optional[str] = None,
+    camera_id: str = "Camera-01",
+    enable_tracking: bool = True,
+    tracker: str = "bytetrack.yaml",
+    min_consecutive_frames: int = 3,
+    dedup_by_track: bool = True,
+    alert_labels: bool = True,
+    draw_banner: bool = True,
+) -> Generator[Dict[str, Any], None, ComplianceAuditor]:
+    """
+    Gerador (stream) que processa um vídeo ou stream quadro a quadro,
+    emitindo telemetria e o frame anotado para exibição suave no Streamlit.
+
+    Yields:
+        Dicionário com o frame anotado, progresso e auditor atualizado.
+
+    Returns:
+        Instância de ComplianceAuditor com todos os registros acumulados.
+    """
+    active_device = device if device is not None else get_default_device()
+    labels_map = ALERT_CLASSES if alert_labels else DEFAULT_CLASSES
+
+    cap = cv2.VideoCapture(video_source if isinstance(video_source, int) else str(video_source))
+    if not cap.isOpened():
+        raise RuntimeError(f"Não foi possível abrir o fluxo de vídeo: {video_source}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    source_name = Path(video_source).name if isinstance(video_source, (str, Path)) else f"Cam_{video_source}"
+
+    auditor = ComplianceAuditor(
+        camera_id=camera_id,
+        dedup_by_track=(dedup_by_track and enable_tracking),
+    )
+
+    temporal_filter = (
+        TemporalTrackerFilter(min_consecutive_frames=min_consecutive_frames)
+        if enable_tracking
+        else None
+    )
+
+    saved_crop_track_ids: Set[int] = set()
+    frame_idx = 0
+
+    try:
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                break
+
+            frame_idx += 1
+            frame_ts = datetime.now()
+            new_violation_crops: List[Dict[str, Any]] = []
+
+            if enable_tracking:
+                results = model.track(
+                    source=frame,
+                    persist=True,
+                    tracker=tracker,
+                    conf=conf_threshold,
+                    iou=iou_threshold,
+                    imgsz=img_size,
+                    device=active_device,
+                    verbose=False,
+                )
+            else:
+                results = model.predict(
+                    source=frame,
+                    conf=conf_threshold,
+                    iou=iou_threshold,
+                    imgsz=img_size,
+                    device=active_device,
+                    verbose=False,
+                )
+
+            boxes_xyxy: List[Tuple[int, int, int, int]] = []
+            class_ids: List[int] = []
+            confidences: List[float] = []
+            track_ids: Optional[List[int]] = [] if enable_tracking else None
+
+            for r in results:
+                if r.boxes is not None and len(r.boxes) > 0:
+                    b_arr = r.boxes.xyxy.cpu().numpy()
+                    c_arr = r.boxes.cls.cpu().numpy().astype(int)
+                    conf_arr = r.boxes.conf.cpu().numpy()
+
+                    t_arr = None
+                    if enable_tracking and r.boxes.id is not None:
+                        t_arr = r.boxes.id.cpu().numpy().astype(int)
+
+                    for idx_box, (b, c, cf) in enumerate(zip(b_arr, c_arr, conf_arr)):
+                        box_tuple = (int(b[0]), int(b[1]), int(b[2]), int(b[3]))
+                        detected_class_id = int(c)
+                        conf_val = float(cf)
+
+                        tid = None
+                        effective_class_id = detected_class_id
+
+                        if t_arr is not None and idx_box < len(t_arr):
+                            tid = int(t_arr[idx_box])
+                            if temporal_filter is not None:
+                                effective_class_id = temporal_filter.update(tid, detected_class_id)
+
+                        boxes_xyxy.append(box_tuple)
+                        class_ids.append(effective_class_id)
+                        confidences.append(conf_val)
+                        if track_ids is not None:
+                            track_ids.append(tid if tid is not None else -1)
+
+            total_persons = len(class_ids)
+            conformant_count = sum(1 for c in class_ids if c == 1)
+            violation_count = sum(1 for c in class_ids if c == 0)
+            compliance_rate = (
+                (conformant_count / total_persons * 100.0) if total_persons > 0 else 100.0
+            )
+
+            # Grava ocorrências no auditor
+            for det_idx, (box, c, cf) in enumerate(zip(boxes_xyxy, class_ids, confidences), start=1):
+                tid = track_ids[det_idx - 1] if track_ids else None
+                if c == 0:
+                    should_crop = False
+                    if enable_tracking and dedup_by_track and tid is not None and tid != -1:
+                        if tid not in saved_crop_track_ids:
+                            saved_crop_track_ids.add(tid)
+                            should_crop = True
+                    elif not enable_tracking:
+                        should_crop = True
+
+                    if should_crop:
+                        crop_bgr = extract_roi(frame, box)
+                        if crop_bgr.size > 0:
+                            crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
+                            new_violation_crops.append({
+                                "track_id": tid,
+                                "frame_idx": frame_idx,
+                                "crop_bgr": crop_bgr,
+                                "crop_rgb": crop_rgb,
+                                "confidence": round(cf, 4),
+                                "bbox_xyxy": box,
+                            })
+
+                auditor.record_detection(
+                    source=source_name,
+                    frame_id=frame_idx,
+                    detection_id=det_idx,
+                    class_id=c,
+                    confidence=cf,
+                    bbox_xyxy=box,
+                    track_id=tid,
+                    timestamp=frame_ts,
+                )
+
+            auditor.record_frame_summary(
+                source=source_name,
+                frame_id=frame_idx,
+                total_persons=total_persons,
+                conformant_count=conformant_count,
+                violation_count=violation_count,
+                timestamp=frame_ts,
+            )
+
+            annotated_frame = frame.copy()
+            if boxes_xyxy:
+                annotated_frame = draw_bounding_boxes(
+                    image=annotated_frame,
+                    boxes_xyxy=boxes_xyxy,
+                    class_ids=class_ids,
+                    confidences=confidences,
+                    class_names=labels_map,
+                    track_ids=track_ids if enable_tracking else None,
+                    thickness=2,
+                )
+
+            if draw_banner:
+                annotated_frame = draw_telemetry_banner(
+                    image=annotated_frame,
+                    total_persons=total_persons,
+                    conformant_count=conformant_count,
+                    violation_count=violation_count,
+                    compliance_rate=compliance_rate,
+                    camera_id=camera_id,
+                    timestamp_str=frame_ts.strftime("%Y-%m-%d %H:%M:%S"),
+                )
+
+            annotated_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+            progress_percent = (frame_idx / total_frames * 100.0) if total_frames > 0 else 0.0
+
+            yield {
+                "frame_idx": frame_idx,
+                "total_frames": total_frames,
+                "progress_percent": min(100.0, progress_percent),
+                "annotated_rgb": annotated_rgb,
+                "annotated_bgr": annotated_frame,
+                "total_persons": total_persons,
+                "conformant_count": conformant_count,
+                "violation_count": violation_count,
+                "compliance_rate_percent": round(compliance_rate, 1),
+                "auditor": auditor,
+                "new_violation_crops": new_violation_crops,
+            }
+
+    finally:
+        cap.release()
 
     return auditor
 
