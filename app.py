@@ -118,7 +118,7 @@ def render_sidebar() -> Dict[str, Any]:
     """Renderiza a barra lateral com configurações operacionais e limiares."""
     st.sidebar.image(
         "https://raw.githubusercontent.com/ultralytics/assets/main/yolov8/banner-yolov8.png",
-        use_container_width=True,
+        width="stretch",
     )
     st.sidebar.markdown("### ⚙️ Parâmetros Operacionais")
 
@@ -288,11 +288,11 @@ def render_tab_images(model, config: Dict[str, Any]) -> None:
         c_orig, c_annot = st.columns(2)
         with c_orig:
             st.markdown("**Imagem Original:**")
-            st.image(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB), use_container_width=True)
+            st.image(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB), width="stretch")
 
         with c_annot:
             st.markdown("**Diagnóstico Operacional (Bounding Boxes):**")
-            st.image(result["annotated_rgb"], use_container_width=True)
+            st.image(result["annotated_rgb"], width="stretch")
 
         # Botão de download da imagem processada
         _, encoded_img = cv2.imencode(".jpg", result["annotated_bgr"])
@@ -313,14 +313,14 @@ def render_tab_images(model, config: Dict[str, Any]) -> None:
                     st.image(
                         crop_info["crop_rgb"],
                         caption=f"Infração #{crop_info['detection_id']} | Conf: {crop_info['confidence']:.2f}",
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         # Tabela Detalhada
         if result["detections"]:
             st.markdown("### 📋 Tabela Detalhada de Detecções")
             df_det = pd.DataFrame(result["detections"])
-            st.dataframe(df_det, use_container_width=True)
+            st.dataframe(df_det, width="stretch")
     else:
         st.info("💡 Faça o upload de uma imagem ou marque 'Usar imagem de amostra' para iniciar a inspeção.")
 
@@ -394,7 +394,7 @@ def render_tab_videos(model, config: Dict[str, Any]) -> None:
                     step["progress_percent"] / 100.0,
                     text=f"Processando quadro {step['frame_idx']} de {step['total_frames']} ({step['progress_percent']:.1f}%)",
                 )
-                frame_placeholder.image(step["annotated_rgb"], use_container_width=True)
+                frame_placeholder.image(step["annotated_rgb"], width="stretch")
 
                 metric_persons.metric("Pessoas no Quadro", step["total_persons"])
                 metric_conformant.metric("Conformes (Quadro)", step["conformant_count"])
@@ -411,7 +411,7 @@ def render_tab_videos(model, config: Dict[str, Any]) -> None:
                                 st.image(
                                     crop["crop_rgb"],
                                     caption=f"Track ID: {crop['track_id']} (Quadro {crop['frame_idx']})",
-                                    use_container_width=True,
+                                    width="stretch",
                                 )
 
                 last_auditor = step["auditor"]
@@ -484,7 +484,7 @@ def render_tab_webcam(model, config: Dict[str, Any]) -> None:
         st.image(
             result["annotated_rgb"],
             caption="Resultado da Inspeção com Bounding Boxes",
-            use_container_width=True,
+            width="stretch",
         )
 
         if result["violation_count"] > 0:
@@ -570,7 +570,7 @@ def render_tab_analytics() -> None:
             violation_count=kpis["head_count"],
             title="Taxa Geral de Uso de EPI",
         )
-        st.plotly_chart(fig_donut, use_container_width=True)
+        st.plotly_chart(fig_donut, width="stretch")
 
     with g2:
         if df_frames is not None and not df_frames.empty:
@@ -578,10 +578,10 @@ def render_tab_analytics() -> None:
                 df_frames=df_frames,
                 title="Série Temporal de Conformidade",
             )
-            st.plotly_chart(fig_temporal, use_container_width=True)
+            st.plotly_chart(fig_temporal, width="stretch")
         else:
             fig_temporal = create_temporal_series_chart(pd.DataFrame())
-            st.plotly_chart(fig_temporal, use_container_width=True)
+            st.plotly_chart(fig_temporal, width="stretch")
 
     g3, g4 = st.columns(2)
     with g3:
@@ -590,9 +590,9 @@ def render_tab_analytics() -> None:
                 df_detections=df_detections,
                 title="Distribuição de Confiança das Predições",
             )
-            st.plotly_chart(fig_conf, use_container_width=True)
+            st.plotly_chart(fig_conf, width="stretch")
         else:
-            st.plotly_chart(create_confidence_distribution_chart(pd.DataFrame()), use_container_width=True)
+            st.plotly_chart(create_confidence_distribution_chart(pd.DataFrame()), width="stretch")
 
     with g4:
         if df_detections is not None and not df_detections.empty:
@@ -600,14 +600,14 @@ def render_tab_analytics() -> None:
                 df_detections=df_detections,
                 title="Conformidade por Câmera / Área",
             )
-            st.plotly_chart(fig_cam, use_container_width=True)
+            st.plotly_chart(fig_cam, width="stretch")
         else:
-            st.plotly_chart(create_camera_ranking_chart(pd.DataFrame()), use_container_width=True)
+            st.plotly_chart(create_camera_ranking_chart(pd.DataFrame()), width="stretch")
 
     # Tabela Interativa de Ocorrências
     if df_detections is not None and not df_detections.empty:
         st.markdown("### 📋 Registro Consolidado de Ocorrências")
-        st.dataframe(df_detections, use_container_width=True)
+        st.dataframe(df_detections, width="stretch")
 
 
 def main() -> None:
