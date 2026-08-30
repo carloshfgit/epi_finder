@@ -15,7 +15,7 @@
 
 ## Visão Geral do Projeto
 
-O **EPI Finder** é um sistema de detecção de objetos focado em Segurança e Saúde no Trabalho (SST), com ênfase na verificação de conformidade da norma **NR-6** (Equipamentos de Proteção Individual). A aplicação identifica automaticamente, a partir de imagens e transmissões de vídeo, se pessoas em canteiros de obra ou ambientes industriais estão ou não utilizando o capacete de segurança obrigatório.
+O **EPI Finder** é um sistema de detecção e rastreamento de objetos focado em Segurança e Saúde no Trabalho (SST), com ênfase na verificação de conformidade da norma **NR-6** (Equipamentos de Proteção Individual). A aplicação identifica e rastreia automaticamente, a partir de imagens e transmissões de vídeo contínuas (CFTV/RTSP), se pessoas em canteiros de obra ou ambientes industriais estão ou não utilizando o capacete de segurança obrigatório.
 
 ### Mapeamento de Classes (Problema Binário):
 * `0: head` (Sem capacete / cabeça desprotegida — **Infração / Alerta Vermelho**)
@@ -65,6 +65,12 @@ O YOLOv8 equilibra simultaneamente três funções de custo para guiar o gradien
 * O custo de um Falso Negativo (um trabalhador desprotegido não visto pela IA) é um potencial acidente fatal e autuações legais.
 * O custo de um Falso Positivo (um alarme falso em alguém de boné ou capuz) é apenas um incômodo operacional. Portanto, o sistema deve ser calibrado com limiares de corte que maximizem o Recall de infrações.
 
+### 8. Rastreamento de Múltiplos Objetos (MOT), Persistência de Identidade e Estabilização Temporal
+* **Associação Temporal (ByteTrack / BoT-SORT):** Transforma detecções estáticas quadro a quadro em trajetórias contínuas associadas a um `Track ID` único para cada indivíduo em movimento no canteiro.
+* **Desduplicação de Registros e Economia de I/O (Opção B):** Em vídeos a 30 FPS, evita que a permanência de um indivíduo gere centenas de linhas idênticas no CSV e fotos repetidas. O pipeline registra apenas o primeiro evento e salva uma única foto de evidência (`violation_track{id}_frame{frame}.jpg`) por infrator.
+* **Filtro de Estabilização Temporal (*Debounce*):** A classe `TemporalTrackerFilter` mantém um buffer histórico de classificações, exigindo $N$ quadros consecutivos de consistência antes de confirmar uma mudança de status, mitigando ruídos transitórios causados por movimentos bruscos ou reflexos.
+* **Métricas de Pessoas Únicas:** Diferenciação entre contagem bruta de frames e indicadores reais de auditoria da CIPA/SST (`unique_persons_tracked`, `unique_violators`, `unique_compliance_rate_percent`).
+
 ---
 
 ## Estrutura do Repositório
@@ -89,7 +95,7 @@ epi_finder/
 │   ├── utils.py              # Cálculo de IoU matricial, conversão de caixas e OpenCV
 │   ├── train.py              # CLI para treinamento modular e versionamento de pesos
 │   ├── evaluate.py           # CLI para auditoria de métricas e exportação em JSON
-│   └── inference.py          # CLI para inferência operacional, recorte de evidências e CSV
+│   └── inference.py          # CLI operacional: inferência, MOT (ByteTrack), recorte de evidências e CSV
 ├── models/                   # Centralização de modelos e auditoria
 │   ├── best.pt               # Melhores pesos treinados (.pt)
 │   ├── metadata.json         # Certidão de nascimento e hiperparâmetros do modelo
@@ -156,9 +162,9 @@ Você pode rodar comandos diretamente dentro do container sem precisar do navega
   ```bash
   docker compose exec epi-finder python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops --camera-id "Canteiro 01 - Portaria"
   ```
-* **Para rodar a inferência em arquivo de vídeo:**
+* **Para rodar a inferência em vídeo com Rastreamento (MOT ByteTrack), desduplicação e recorte de evidências:**
   ```bash
-  docker compose exec epi-finder python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt
+  docker compose exec epi-finder python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt --track --tracker bytetrack.yaml --save-crops
   ```
 * **Para verificar ajuda e parâmetros de qualquer script CLI:**
   ```bash
@@ -208,13 +214,14 @@ pip install -r requirements.txt
 # Iniciar o ambiente interativo
 jupyter lab
 
-# Ou executar a inferência operacional diretamente:
+# Executar a inferência em imagens:
 python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops
+
+# Executar a inferência em vídeo com rastreamento contínuo (MOT):
+python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt --track --save-crops
 ```
 
-
 ---
-
 
 ## Documentações Complementares
 
