@@ -82,16 +82,20 @@ epi_finder/
 ├── notebooks/                # Cadernos interativos de estudo e experimentação
 │   ├── 01_eda_dataset.ipynb         # Fase 3: EDA com Pandas & manipulação com NumPy
 │   ├── 02_training_yolov8.ipynb     # Fase 4: Treinamento e curvas de aprendizado
-│   └── 03_model_evaluation.ipynb   # Fase 5: Validação no teste cego e diagnósticos SST
+│   ├── 03_model_evaluation.ipynb   # Fase 5: Validação no teste cego e diagnósticos SST
+│   └── 04_inference_pipeline.ipynb  # Fase 6: Pipeline operacional e relatórios de conformidade
 ├── src/                      # Código modular e ferramentas CLI reutilizáveis
 │   ├── __init__.py
 │   ├── utils.py              # Cálculo de IoU matricial, conversão de caixas e OpenCV
 │   ├── train.py              # CLI para treinamento modular e versionamento de pesos
-│   └── evaluate.py           # CLI para auditoria de métricas e exportação em JSON
+│   ├── evaluate.py           # CLI para auditoria de métricas e exportação em JSON
+│   └── inference.py          # CLI para inferência operacional, recorte de evidências e CSV
 ├── models/                   # Centralização de modelos e auditoria
 │   ├── best.pt               # Melhores pesos treinados (.pt)
 │   ├── metadata.json         # Certidão de nascimento e hiperparâmetros do modelo
 │   └── test_metrics.json     # Relatório consolidado da avaliação cega no teste
+├── runs/                     # Artefatos gerados de treino, avaliação e inferência
+│   └── inference/            # Mídias anotadas, evidências (violations/) e relatórios CSV
 ├── Dockerfile                # Imagem oficial Python 3.12 com OpenCV e PyTorch
 ├── docker-compose.yml        # Orquestração do container com Jupyter Lab (porta 8888)
 ├── requirements.txt          # Dependências do projeto
@@ -132,9 +136,10 @@ Abra o seu navegador web favorito e acesse:
 **[http://localhost:8888](http://localhost:8888)**
 
 Você terá acesso direto aos notebooks interativos em `notebooks/`:
-* `01_eda_dataset.ipynb`
-* `02_training_yolov8.ipynb`
-* `03_model_evaluation.ipynb`
+* `01_eda_dataset.ipynb` (Fase 3: Análise Exploratória e NumPy)
+* `02_training_yolov8.ipynb` (Fase 4: Treinamento e Curvas de Perda)
+* `03_model_evaluation.ipynb` (Fase 5: Avaliação no Teste Cego e Métricas SST)
+* `04_inference_pipeline.ipynb` (Fase 6: Inferência, Recorte de Evidências e Auditoria Pandas)
 
 #### 5. Executar os scripts Python via CLI no Container
 Você pode rodar comandos diretamente dentro do container sem precisar do navegador:
@@ -147,10 +152,19 @@ Você pode rodar comandos diretamente dentro do container sem precisar do navega
   ```bash
   docker compose exec epi-finder python src/evaluate.py --weights models/best.pt --split test
   ```
+* **Para rodar a inferência operacional em imagens (com recorte de evidências e relatório CSV):**
+  ```bash
+  docker compose exec epi-finder python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops --camera-id "Canteiro 01 - Portaria"
+  ```
+* **Para rodar a inferência em arquivo de vídeo:**
+  ```bash
+  docker compose exec epi-finder python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt
+  ```
 * **Para verificar ajuda e parâmetros de qualquer script CLI:**
   ```bash
   docker compose exec epi-finder python src/train.py --help
   docker compose exec epi-finder python src/evaluate.py --help
+  docker compose exec epi-finder python src/inference.py --help
   ```
 
 #### 6. Parar o container
@@ -194,9 +208,10 @@ pip install -r requirements.txt
 # Iniciar o ambiente interativo
 jupyter lab
 
-# Ou executar o script de avaliação diretamente:
-python src/evaluate.py --weights models/best.pt --split test
+# Ou executar a inferência operacional diretamente:
+python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops
 ```
+
 
 ---
 

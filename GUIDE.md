@@ -268,5 +268,6 @@ Ao processar vídeos contínuos de câmeras:
 5. [x] Configurar `data/data.yaml` e executar Análise Exploratória (EDA) com Pandas/NumPy.
 6. [x] Executar primeiro treino de baseline com `yolov8n.pt` e estruturar metadados do modelo.
 7. [x] Validar métricas cegas, estruturar script modular de avaliação (`src/evaluate.py`) e notebook analítico (`notebooks/03_model_evaluation.ipynb`).
-8. [ ] Construir o script de inferência operacional com alertas visuais (`src/inference.py`) e relatórios de conformidade (Fase 6).
+8. [x] Construir o script de inferência operacional com alertas visuais (`src/inference.py`), recorte de evidências (NumPy) e relatórios de conformidade com Pandas (Fase 6).
+
 

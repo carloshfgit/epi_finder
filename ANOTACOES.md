@@ -310,11 +310,72 @@ Consolidei a importância de ferramentas padronizadas para análise de dados e M
 
 ---
 
-## 8. Próximos Passos (Fase 6: Inferência & Relatórios)
+## 8. Fase 6: Aplicação de Inferência Operacional e Relatórios de Conformidade (NumPy + Pandas + OpenCV)
 
-1.  **Construção do Script de Inferência Operacional:** Desenvolver o script `src/inference.py` com OpenCV para suporte a feeds de vídeo em tempo real ou arquivos de vídeo.
-2.  **Alertas Visuais Dinâmicos:** Renderizar caixas vermelhas com tag `"ALERTA: SEM CAPACETE"` e verdes com tag `"Capacete"`.
-3.  **Relatório de Conformidade:** Gerar logs estruturados com data/hora das infrações salvas em CSV via Pandas para posterior auditoria da segurança do trabalho.
+Nesta fase, consolidei a transição de um modelo experimental para uma **aplicação operacional de ponta a ponta**. Transformei a rede neural YOLOv8 em uma ferramenta de monitoramento ativo de Segurança e Saúde no Trabalho (SST), integrando visão computacional em tempo real, manipulação matricial com **NumPy** e auditoria de dados com **Pandas**.
+
+---
+
+### 8.1. Arquitetura da Solução Operacional
+
+A aplicação foi estruturada em duas camadas complementares:
+1. **Camada Visual e de Telemetria Operacional ([`src/utils.py`](src/utils.py)):**
+   - **Alertas Dinâmicos:** As caixas delimitadoras passaram a exibir rótulos operacionais diretos da NR-6: `"ALERTA: SEM CAPACETE"` em **Vermelho BGR `(0, 0, 255)`** e `"Capacete"` em **Verde BGR `(0, 255, 0)`**.
+   - **Banner de Telemetria no Frame (`draw_telemetry_banner`):** Utilizei a técnica de *Alpha Blending* (`cv2.addWeighted` no OpenCV) para criar uma barra superior semi-transparente que sobrepõe em tempo real: identificação da câmera, contagem de presentes, pessoas conformes, infrações e a taxa percentual de conformidade instantânea.
+2. **Motor de Inferência e Auditoria de Dados ([`src/inference.py`](src/inference.py)):**
+   - **Agregador `ComplianceAuditor`:** Responsável por coletar cada evento de detecção e transformá-lo em dados tabulares estruturados com Pandas.
+   - **Pipeline Unificado (`run_inference`):** Suporta imagens estáticas, diretórios em lote, arquivos de vídeo (`.mp4`, `.avi`, etc.) via `cv2.VideoCapture` e `cv2.VideoWriter`, além de webcams e câmeras IP/RTSP.
+
+---
+
+### 8.2. Fundamentos de Visão Computacional e Manipulação Matricial (NumPy)
+
+Compreendi como a manipulação de matrizes no NumPy potencializa pipelines de visão computacional:
+* **Recorte de Evidências (ROI Slicing):**
+  * Em auditoria de segurança humana, apenas alertar no monitor não é suficiente: a equipe de SST necessita de evidências fotográficas das infrações.
+  * Utilizei o fatiamento indexado direto de matrizes 3D do NumPy: `crop = frame[y1:y2, x1:x2].copy()`.
+  * As imagens das infrações são salvas com nomes rastreáveis (`violation_frame{id}_det{id}_{timestamp}.jpg`) em `runs/inference/violations/`.
+* **Mesclagem Ponderada de Imagens (*Alpha Blending*):**
+  * Para desenhar painéis semi-transparentes sem cobrir totalmente a visão da câmera, utilizei a fórmula da combinação linear ponderada de matrizes:
+    $$\text{Frame\_Final} = \alpha \cdot \text{Overlay} + (1 - \alpha) \cdot \text{Canvas} + \gamma$$
+  * Com $\alpha = 0.75$, a barra escura de status mantém o contraste dos textos brancos e a nitidez dos detalhes do canteiro de obras ao fundo.
+
+---
+
+### 8.3. Auditoria Estatística e Telemetria de SST com Pandas
+
+Entendi a importância de transformar predições de inteligência artificial em dados acionáveis para tomadores de decisão:
+* **Registro Granular de Eventos:**
+  * Cada objeto localizado gera um registro com: `timestamp`, `camera_id`, `source`, `frame_id`, `class_id`, `status_label`, `confidence`, coordenadas `[x1, y1, x2, y2]`, área da caixa (`box_area`) e caminho da foto recortada (`crop_path`).
+* **Indicadores Chave de Desempenho (KPIs de SST):**
+  * **Taxa Global de Conformidade (%):** Proporção de trabalhadores protegidos em relação ao total presente:
+    $$\text{Taxa de Conformidade} = \left( \frac{\text{Capacetes Detectados}}{\text{Total de Pessoas (Head + Helmet)}} \right) \times 100$$
+  * **Volumetria de Infrações por Posto:** Permite identificar setores ou horários do dia com maior negligência no uso de EPI.
+* **Exportação Multiformato:**
+  * O pipeline exporta automaticamente o relatório completo em formato CSV (`compliance_report.csv`) para ingestão em bancos de dados ou dashboards (ex: Power BI) e um sumário executivo em JSON (`summary.json`) para integração com sistemas legados de CFTV.
+
+---
+
+### 8.4. Práticas de MLOps e Desafios de Produção
+
+Durante o desenvolvimento do módulo operacional, consolidei aprendizados fundamentais para engenharia de software e deploy de modelos:
+* **Compatibilidade com Ambientes Headless e Docker:**
+  * Em servidores em nuvem ou containers Docker sem interface gráfica X11, o comando `cv2.imshow()` gera exceções de display. Tratei essas chamadas em blocos `try/except cv2.error` para que o pipeline funcione sem falhas tanto em servidores quanto em máquinas de mesa.
+* **Resolução Dinâmica de Pacotes e Módulos (`sys.path`):**
+  * Para evitar erros do tipo `ModuleNotFoundError: No module named 'src'`, configurei a injeção do `PROJECT_ROOT` dinamicamente no `sys.path`. Isso permite que o script seja executado de três formas distintas sem quebrar:
+    1. Como script CLI direto: `python src/inference.py --source ...`
+    2. Como módulo Python: `python -m src.inference --source ...`
+    3. Sendo importado programaticamente dentro dos notebooks: `from src.inference import run_inference`.
+* **Laboratório Interativo ([`notebooks/04_inference_pipeline.ipynb`](notebooks/04_inference_pipeline.ipynb)):**
+  * Criei um caderno interativo completo para demonstrar o pipeline, inspecionar evidências de infração e gerar diagnósticos visuais (gráficos de rosca da conformidade, histograma de confiança por classe e dispersão entre tamanho da caixa e certeza do modelo).
+
+---
+
+## 9. Próximos Passos (Fase 7: Extensões Opcionais)
+
+1. **Interface Web Interativa (Streamlit / Gradio):** Criar um dashboard no navegador onde usuários façam upload de vídeos e vejam os gráficos de conformidade atualizados em tempo real.
+2. **Rastreamento de Objetos (*Multi-Object Tracking*):** Adicionar algoritmos de tracking (como ByteTrack ou BoT-SORT com `model.track(source=...)`) para rastrear o mesmo trabalhador ao longo dos frames e evitar contagens duplicadas no relatório de infrações.
+
 
 
 
