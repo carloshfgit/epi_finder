@@ -320,3 +320,86 @@ def draw_bounding_boxes(
         )
 
     return canvas
+
+
+# Rótulos customizados de alerta operacional (Fase 6 - Segurança do Trabalho)
+ALERT_CLASSES: Dict[int, str] = {
+    0: "ALERTA: SEM CAPACETE",
+    1: "Capacete"
+}
+
+
+def draw_telemetry_banner(
+    image: np.ndarray,
+    total_persons: int,
+    conformant_count: int,
+    violation_count: int,
+    compliance_rate: float,
+    camera_id: str = "Camera-01",
+    timestamp_str: Optional[str] = None
+) -> np.ndarray:
+    """
+    Desenha um painel/banner de telemetria semi-transparente no topo da imagem,
+    exibindo métricas operacionais de conformidade e status de segurança em tempo real.
+
+    Args:
+        image: Imagem de entrada em formato BGR.
+        total_persons: Quantidade total de pessoas (head + helmet) detectadas.
+        conformant_count: Quantidade de pessoas em conformidade (helmet).
+        violation_count: Quantidade de pessoas em infração (head).
+        compliance_rate: Taxa percentual de conformidade [0.0 - 100.0].
+        camera_id: Identificador da câmera ou setor de monitoramento.
+        timestamp_str: Data/hora formatada para exibição (opcional).
+
+    Returns:
+        Imagem com o banner de telemetria sobreposto.
+    """
+    canvas = image.copy()
+    h, w = canvas.shape[:2]
+
+    # Altura do banner adaptável (entre 45 e 65 pixels conforme a resolução)
+    banner_height = max(48, min(int(h * 0.08), 70))
+
+    # Cria uma camada preta para mesclagem semi-transparente (alpha blending com NumPy/OpenCV)
+    overlay = canvas.copy()
+    cv2.rectangle(overlay, (0, 0), (w, banner_height), (20, 20, 20), -1)
+
+    # Aplica transparência de 75%
+    alpha = 0.75
+    cv2.addWeighted(overlay, alpha, canvas, 1 - alpha, 0, canvas)
+
+    # Linha divisória inferior do banner (verde se 100% conforme, vermelha se houver infração)
+    status_color = (0, 255, 0) if violation_count == 0 else (0, 0, 255)
+    cv2.line(canvas, (0, banner_height), (w, banner_height), status_color, 2)
+
+    # Configuração de fonte
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = max(0.45, min(w / 1600.0, 0.65))
+    thickness = 1
+
+    # Textos da telemetria
+    left_text = f"EPI FINDER | {camera_id}"
+    if timestamp_str:
+        left_text += f" | {timestamp_str}"
+
+    center_text = f"Total: {total_persons} | Conformes: {conformant_count} | Infrações: {violation_count}"
+    rate_text = f"Conformidade: {compliance_rate:.1f}%"
+
+    # Posicionamento vertical centralizado no banner
+    text_y = int(banner_height * 0.62)
+
+    # Desenha texto esquerdo (identificação do sistema e câmera)
+    cv2.putText(canvas, left_text, (15, text_y), font, font_scale, (220, 220, 220), thickness, cv2.LINE_AA)
+
+    # Desenha texto central (contagens)
+    (cw, ch), _ = cv2.getTextSize(center_text, font, font_scale, thickness)
+    center_x = max(15, (w - cw) // 2)
+    cv2.putText(canvas, center_text, (center_x, text_y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+    # Desenha texto direito (taxa percentual com cor de status)
+    (rw, rh), _ = cv2.getTextSize(rate_text, font, font_scale, thickness)
+    right_x = max(15, w - rw - 20)
+    cv2.putText(canvas, rate_text, (right_x, text_y), font, font_scale, status_color, thickness + 1, cv2.LINE_AA)
+
+    return canvas
+
