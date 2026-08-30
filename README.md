@@ -11,6 +11,8 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 
 > **Nota de Propósito:** Este projeto foi desenvolvido para fins de **estudo, aprendizado prático e consolidação de conceitos** em **Visão Computacional**, **Deep Learning (YOLOv8)**, **Manipulação Matricial (NumPy)**, **Análise de Dados (Pandas)** e **Práticas de Engenharia de Machine Learning (MLOps)**. Todo o meu processo de aprendizado e estudo foi documentado em [ANOTACOES.md](ANOTACOES.md).
+>
+> **Acesso Rápido:** Quer ir direto ao ponto? Veja os comandos simplificados de inicialização em [QUICK_SETUP.md](QUICK_SETUP.md).
 
 ---
 
@@ -121,6 +123,8 @@ epi_finder/
 ---
 
 ## Como Executar o Projeto em Qualquer Máquina
+
+> ⚡ **Dica:** Para um passo a passo enxuto sem as descrições detalhadas abaixo, utilize o guia de [Quick Setup](QUICK_SETUP.md).
 
 Você pode executar o projeto de duas formas:
 1. **Com Docker (Recomendado):** Ambiente 100% isolado, sem necessidade de configurar Python ou bibliotecas gráficas no seu sistema operacional.
