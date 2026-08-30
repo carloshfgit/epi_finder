@@ -267,10 +267,14 @@ Para evitar que uma única pessoa sem capacete gere centenas de alertas repetido
 
 ### Etapa 7.2: Dashboard Interativo de SST com Streamlit
 Criação de um painel de controle executado diretamente no navegador web:
-* **Interface Gráfica:** Desenvolver um aplicativo em Python utilizando **Streamlit** que permita a upload de mídias de vídeo e seleção de limiares de confiança (`conf_threshold`) em sliders interativos.
+* **Interface Gráfica:** Desenvolver um aplicativo em Python utilizando **Streamlit** que permita o upload de mídias de vídeo e imagens estáticas (fotos), bem como a seleção de limiares de confiança (`conf_threshold`) em sliders interativos.
+* **Teste com Webcam (Estático):** Para permitir testes práticos do modelo usando a webcam diretamente na nuvem gratuita (como o Streamlit Community Cloud), implementar a captura de fotos pontuais com o componente nativo `st.camera_input`. O processamento de vídeo contínuo em tempo real via WebRTC deve ser evitado no deploy gratuito devido a restrições de CPU e complexidade de servidores STUN/TURN.
 * **Métricas em Tempo Real:** Exibir painéis numéricos grandes com KPIs de conformidade atualizados dinamicamente à medida que o vídeo é processado.
 * **Gráficos Dinâmicos:** Renderizar gráficos interativos (como gráficos de rosca e séries temporais de conformidade) para fornecer diagnósticos visuais imediatos para auditorias da CIPA e SST.
-
+* **Arquitetura Recomendada (Separação de Preocupações):** Para manter o código modular e testável, o app deve seguir uma arquitetura de camadas:
+  * `app.py` (Ponto de entrada na raiz): Responsável estritamente pela renderização de tela, widgets e estados do Streamlit.
+  * `src/inference.py`: Contém a lógica de IA encapsulada (carregamento do modelo YOLOv8, inferência e desenho das caixas delimitadoras).
+  * `src/analytics.py`: Responsável por ler os relatórios em CSV da pasta `data/` e formatar os dados agregados para alimentar os gráficos do Plotly e as métricas.
 
 ---
 
