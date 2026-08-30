@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Garante que a raiz do projeto esteja no sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -51,7 +51,6 @@ except ImportError:
     )
 
 
-
 VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 VALID_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv"}
 
@@ -66,19 +65,130 @@ def get_default_device() -> str:
     return "0" if torch.cuda.is_available() else "cpu"
 
 
+class TemporalTrackerFilter:
+    """
+    Filtro de estabilização temporal para Multi-Object Tracking (MOT - Etapa 7.1).
+
+    Minimiza ruídos e falsos alertas transitórios (1 a 2 frames) causados por
+    movimentações bruscas da cabeça, sombras repentinas ou oclusões parciais,
+    exigindo consistência de detecção por N quadros consecutivos antes de
+    confirmar uma mudança definitiva de status.
+    """
+
+    def __init__(self, min_consecutive_frames: int = 3, max_history: int = 30) -> None:
+        """
+        Args:
+            min_consecutive_frames: Quantidade mínima de quadros consecutivos para confirmação.
+            max_history: Tamanho máximo da janela de histórico por indivíduo (evita vazamento de memória).
+        """
+        self.min_consecutive_frames = max(1, min_consecutive_frames)
+        self.max_history = max_history
+        self.history: Dict[int, List[int]] = {}
+        self.stabilized_classes: Dict[int, int] = {}
+        self.confirmed_violations: Set[int] = set()
+
+    def update(self, track_id: int, detected_class_id: int) -> int:
+        """
+        Atualiza o buffer de detecções do track_id e retorna a classe estabilizada.
+
+        Args:
+            track_id: Identificador numérico do objeto rastreado.
+            detected_class_id: ID da classe detectada no frame atual (0=head, 1=helmet).
+
+        Returns:
+            ID da classe estabilizada após filtragem temporal.
+        """
+        if track_id not in self.history:
+            self.history[track_id] = []
+
+        self.history[track_id].append(detected_class_id)
+        if len(self.history[track_id]) > self.max_history:
+            self.history[track_id].pop(0)
+
+        # Se ainda não possui observações suficientes, assume a detecção atual
+        if len(self.history[track_id]) < self.min_consecutive_frames:
+            if track_id not in self.stabilized_classes:
+                self.stabilized_classes[track_id] = detected_class_id
+            return self.stabilized_classes[track_id]
+
+        recent = self.history[track_id][-self.min_consecutive_frames:]
+        # Confirma mudança somente se todos os últimos N frames forem idênticos
+        if all(c == detected_class_id for c in recent):
+            self.stabilized_classes[track_id] = detected_class_id
+            if detected_class_id == 0:
+                self.confirmed_violations.add(track_id)
+        elif track_id not in self.stabilized_classes:
+            self.stabilized_classes[track_id] = detected_class_id
+
+        return self.stabilized_classes[track_id]
+
+    def is_violation_confirmed(self, track_id: int) -> bool:
+        """Verifica se a infração (classe 0 - head) já atingiu o critério de confirmação temporal."""
+        return track_id in self.confirmed_violations
+
+
+def resolve_tracker_config(
+    tracker_name_or_path: str,
+    conf_threshold: float,
+    cache_dir: Path
+) -> str:
+    """
+    Garante que os limiares de associação do tracker (ByteTrack/BoT-SORT)
+    sejam compatíveis com o limiar de confiança solicitado pelo usuário.
+    Se conf_threshold for menor que o padrão (0.25), gera dinamicamente
+    uma configuração YAML calibrada para garantir que os objetos recebam Track IDs.
+    """
+    tracker_p = Path(tracker_name_or_path)
+    if tracker_p.exists() and tracker_p.is_file():
+        return str(tracker_p.resolve())
+
+    # Se for bytetrack e conf_threshold for inferior ao padrão 0.25:
+    if "bytetrack" in tracker_name_or_path.lower() and conf_threshold < 0.25:
+        custom_yaml = cache_dir / "calibrated_bytetrack.yaml"
+        custom_yaml.parent.mkdir(parents=True, exist_ok=True)
+        content = (
+            "tracker_type: bytetrack\n"
+            f"track_high_thresh: {float(conf_threshold)}\n"
+            f"track_low_thresh: {float(max(0.0001, conf_threshold * 0.5))}\n"
+            f"new_track_thresh: {float(conf_threshold)}\n"
+            "track_buffer: 30\n"
+            "match_thresh: 0.8\n"
+            "fuse_score: True\n"
+        )
+        custom_yaml.write_text(content, encoding="utf-8")
+        return str(custom_yaml)
+
+    return tracker_name_or_path
+
+
 class ComplianceAuditor:
     """
     Agregador de auditoria e telemetria de Segurança e Saúde no Trabalho (SST).
 
     Armazena eventos de detecção, calcula métricas estatísticas e consolida
     relatórios de conformidade utilizando Pandas.
+    Suporta Multi-Object Tracking (MOT), filtragem temporal e desduplicação por Track ID
+    (Opção B: grava no CSV apenas a primeira detecção de cada indivíduo rastreado).
     """
 
-    def __init__(self, camera_id: str = "Camera-01") -> None:
+    def __init__(self, camera_id: str = "Camera-01", dedup_by_track: bool = False) -> None:
+        """
+        Args:
+            camera_id: Identificador do posto ou câmera de monitoramento.
+            dedup_by_track: Se True, filtra o relatório CSV para conter somente
+                           a primeira detecção de cada track_id (Opção B).
+        """
         self.camera_id = camera_id
+        self.dedup_by_track = dedup_by_track
         self.records: List[Dict[str, Any]] = []
         self.frame_summaries: List[Dict[str, Any]] = []
         self.start_time = datetime.now()
+
+        # Estruturas de conjunto para rastreamento de indivíduos únicos
+        self.seen_track_ids: Set[int] = set()
+        self.violation_track_ids: Set[int] = set()
+        self.conformant_track_ids: Set[int] = set()
+        self.logged_track_ids: Set[int] = set()
 
     def record_detection(
         self,
@@ -88,15 +198,49 @@ class ComplianceAuditor:
         class_id: int,
         confidence: float,
         bbox_xyxy: Tuple[int, int, int, int],
+        track_id: Optional[int] = None,
         timestamp: Optional[datetime] = None,
         crop_path: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         """
         Registra uma detecção individual (objeto head ou helmet).
+
+        Args:
+            source: Nome do arquivo ou fluxo de entrada.
+            frame_id: Índice do frame processado.
+            detection_id: Identificador da caixa no frame atual.
+            class_id: Classe predita (0=head, 1=helmet).
+            confidence: Probabilidade / confiança da detecção.
+            bbox_xyxy: Coordenadas em pixels (x1, y1, x2, y2).
+            track_id: Identificador único persistente do indivíduo (MOT).
+            timestamp: Data/hora da captura.
+            crop_path: Caminho da foto de evidência recortada (se houver).
+
+        Returns:
+            True se o registro foi salvo no relatório; False se foi descartado por desduplicação.
         """
         ts = timestamp or datetime.now()
         x1, y1, x2, y2 = bbox_xyxy
         is_violation = (class_id == 0)
+
+        # Atualiza métricas de instâncias únicas se houver tracking
+        if track_id is not None:
+            self.seen_track_ids.add(track_id)
+            if is_violation:
+                self.violation_track_ids.add(track_id)
+            else:
+                self.conformant_track_ids.add(track_id)
+
+            # Opção B: filtrar diretamente o compliance_report.csv para conter
+            # somente a primeira detecção de cada track_id
+            if self.dedup_by_track and track_id in self.logged_track_ids:
+                return False
+            self.logged_track_ids.add(track_id)
+        elif self.dedup_by_track:
+            # Protege contra poluição repetitiva de caixas espúrias sem track_id
+            if -1 in self.logged_track_ids:
+                return False
+            self.logged_track_ids.add(-1)
 
         record = {
             "timestamp": ts.isoformat(),
@@ -104,6 +248,7 @@ class ComplianceAuditor:
             "source": str(source),
             "frame_id": frame_id,
             "detection_id": detection_id,
+            "track_id": track_id if track_id is not None else -1,
             "class_id": int(class_id),
             "class_name": DEFAULT_CLASSES.get(class_id, f"class_{class_id}"),
             "status_label": ALERT_CLASSES.get(class_id, f"Class {class_id}"),
@@ -119,6 +264,7 @@ class ComplianceAuditor:
             "crop_path": crop_path or ""
         }
         self.records.append(record)
+        return True
 
     def record_frame_summary(
         self,
@@ -156,7 +302,7 @@ class ComplianceAuditor:
         if not self.records:
             return pd.DataFrame(columns=[
                 "timestamp", "camera_id", "source", "frame_id", "detection_id",
-                "class_id", "class_name", "status_label", "confidence",
+                "track_id", "class_id", "class_name", "status_label", "confidence",
                 "is_violation", "x1", "y1", "x2", "y2", "box_width", "box_height",
                 "box_area", "crop_path"
             ])
@@ -175,7 +321,8 @@ class ComplianceAuditor:
 
     def get_audit_summary(self) -> Dict[str, Any]:
         """
-        Calcula indicadores consolidados de conformidade para o relatório final.
+        Calcula indicadores consolidados de conformidade para o relatório final,
+        incluindo métricas tradicionais por detecção e métricas de indivíduos únicos via MOT.
         """
         total_records = len(self.records)
         df_det = self.to_dataframe()
@@ -201,20 +348,36 @@ class ComplianceAuditor:
             df_frames = self.to_frame_summary_dataframe()
             frames_with_violations = int((df_frames["violations_head"] > 0).sum())
 
+        # Métricas de Indivíduos Únicos (MOT - Etapa 7.1)
+        total_tracks = len(self.seen_track_ids)
+        unique_violations = len(self.violation_track_ids)
+        unique_conformant = len(self.conformant_track_ids)
+        unique_rate = (
+            float(round((unique_conformant / total_tracks) * 100.0, 2))
+            if total_tracks > 0
+            else 100.0
+        )
+
         return {
             "camera_id": self.camera_id,
             "session_start": self.start_time.isoformat(),
             "session_end": datetime.now().isoformat(),
+            "tracking_enabled": total_tracks > 0,
+            "dedup_by_track": self.dedup_by_track,
             "total_frames_processed": total_frames,
             "frames_with_violations": frames_with_violations,
-            "total_detections": total_records,
-            "conformant_helmets": helmets,
-            "violations_head": violations,
+            "total_detections_logged": total_records,
+            "conformant_helmets_logged": helmets,
+            "violations_head_logged": violations,
             "overall_compliance_rate_percent": overall_rate,
+            "unique_persons_tracked": total_tracks,
+            "unique_conformant": unique_conformant,
+            "unique_violators": unique_violations,
+            "unique_compliance_rate_percent": unique_rate,
             "mean_confidence": mean_conf,
             "mean_confidence_helmet": mean_conf_helmet,
             "mean_confidence_violation": mean_conf_violation,
-            "status": "CONFORME" if violations == 0 else "ATENCAO: INFRACOES DETECTADAS",
+            "status": "CONFORME" if violations == 0 and unique_violations == 0 else "ATENCAO: INFRACOES DETECTADAS",
         }
 
     def export_reports(
@@ -264,10 +427,15 @@ def run_inference(
     show: bool = False,
     alert_labels: bool = True,
     draw_banner: bool = True,
+    enable_tracking: bool = False,
+    tracker: str = "bytetrack.yaml",
+    min_consecutive_frames: int = 3,
+    dedup_by_track: bool = True,
     verbose: bool = True,
 ) -> ComplianceAuditor:
     """
     Executa o pipeline de inferência operacional e auditoria de SST.
+    Suporta Multi-Object Tracking (MOT - Etapa 7.1) com desduplicação de logs e evidências.
 
     Args:
         source: Caminho para imagem, diretório, vídeo ou índice de webcam (0, 1).
@@ -277,7 +445,7 @@ def run_inference(
         img_size: Resolução quadrada para redimensionamento de entrada.
         device: Dispositivo de execução ('0' para GPU CUDA ou 'cpu').
         output_dir: Diretório onde serão gravados os resultados.
-        report_csv: Caminho para salvar a tabela CSV com todas as ocorrências.
+        report_csv: Caminho para salvar a tabela CSV com as ocorrências.
         summary_json: Caminho para salvar o sumário consolidado em JSON.
         camera_id: Identificador da câmera / local de monitoramento.
         save_crops: Se True, recorta e salva fotos de cada infração identificada.
@@ -285,6 +453,11 @@ def run_inference(
         show: Se True, exibe janela com reprodução em tempo real (OpenCV).
         alert_labels: Se True, exibe 'ALERTA: SEM CAPACETE' e 'Capacete'.
         draw_banner: Se True, sobrepõe a barra de telemetria no topo do frame.
+        enable_tracking: Se True, ativa Multi-Object Tracking (ByteTrack/BoT-SORT).
+        tracker: Nome do arquivo YAML do tracker ('bytetrack.yaml' ou 'botsort.yaml').
+        min_consecutive_frames: Limiar de quadros consecutivos para confirmação temporal.
+        dedup_by_track: Se True, filtra o compliance_report.csv para conter apenas
+                        a primeira detecção de cada track_id (Opção B).
         verbose: Se True, imprime informações no terminal.
 
     Returns:
@@ -293,7 +466,6 @@ def run_inference(
     # Resolução de caminhos
     weights_path = Path(weights).resolve()
     if not weights_path.exists():
-        # Fallback inteligente se best.pt não for encontrado
         fallback_weights = Path("yolov8n.pt").resolve()
         if fallback_weights.exists():
             if verbose:
@@ -327,15 +499,19 @@ def run_inference(
 
     if verbose:
         print("=" * 78)
-        print("🛡️  EPI FINDER - INFERÊNCIA OPERACIONAL E AUDITORIA SST (FASE 6)")
+        print("🛡️  EPI FINDER - INFERÊNCIA OPERACIONAL E AUDITORIA SST (FASE 7.1)")
         print("=" * 78)
-        print(f"📦 Modelo / Pesos   : {weights_path}")
-        print(f"🎯 Fonte de Dados   : {source_name}")
-        print(f"🎥 ID da Câmera     : {camera_id}")
-        print(f"⚡ Dispositivo      : {active_device} ({'GPU CUDA' if active_device != 'cpu' else 'CPU'})")
-        print(f"🎯 Limiar Confiança : {conf_threshold} | IoU (NMS): {iou_threshold}")
-        print(f"📁 Diretório Saída  : {out_dir}")
-        print(f"✂️  Recortar Evidências: {'Sim' if save_crops else 'Não'}")
+        print(f"📦 Modelo / Pesos       : {weights_path}")
+        print(f"🎯 Fonte de Dados       : {source_name}")
+        print(f"🎥 ID da Câmera         : {camera_id}")
+        print(f"⚡ Dispositivo          : {active_device} ({'GPU CUDA' if active_device != 'cpu' else 'CPU'})")
+        print(f"🎯 Limiar Confiança     : {conf_threshold} | IoU (NMS): {iou_threshold}")
+        print(f"🔄 Rastreamento (MOT)   : {'Ativo (' + tracker + ')' if enable_tracking else 'Desativado'}")
+        if enable_tracking:
+            print(f"⏳ Filtro Temporal      : {min_consecutive_frames} quadros consecutivos")
+            print(f"🧹 Desduplicação CSV    : {'Opção B: 1 registro por track_id' if dedup_by_track else 'Todos os frames'}")
+        print(f"📁 Diretório Saída      : {out_dir}")
+        print(f"✂️  Recortar Evidências  : {'Sim (desduplicado por indivíduo)' if save_crops and enable_tracking and dedup_by_track else ('Sim' if save_crops else 'Não')}")
         print("=" * 78)
 
     # Carregar modelo YOLO
@@ -343,7 +519,17 @@ def run_inference(
         print(f"\n📥 Inicializando modelo YOLO...")
     model = YOLO(str(weights_path))
 
-    auditor = ComplianceAuditor(camera_id=camera_id)
+    auditor = ComplianceAuditor(
+        camera_id=camera_id,
+        dedup_by_track=(dedup_by_track and enable_tracking)
+    )
+
+    temporal_filter = (
+        TemporalTrackerFilter(min_consecutive_frames=min_consecutive_frames)
+        if enable_tracking
+        else None
+    )
+    saved_crop_track_ids: Set[int] = set()
 
     # 1. PROCESSAMENTO DE IMAGEM ÚNICA OU DIRETÓRIO DE IMAGENS
     if not is_webcam and source_path and (source_path.is_dir() or source_path.suffix.lower() in VALID_IMAGE_EXTENSIONS):
@@ -406,7 +592,6 @@ def run_inference(
             # Registro de cada detecção no Auditor
             for det_id, (box, c, cf) in enumerate(zip(boxes_xyxy, class_ids, confidences), start=1):
                 crop_path_str = None
-                # Se for infração e save_crops ativo, recorta com NumPy e salva
                 if save_crops and c == 0:
                     crop = extract_roi(frame, box)
                     if crop.size > 0:
@@ -422,6 +607,7 @@ def run_inference(
                     class_id=c,
                     confidence=cf,
                     bbox_xyxy=box,
+                    track_id=None,
                     timestamp=frame_ts,
                     crop_path=crop_path_str,
                 )
@@ -445,6 +631,7 @@ def run_inference(
                     class_ids=class_ids,
                     confidences=confidences,
                     class_names=labels_map,
+                    track_ids=None,
                     thickness=2
                 )
 
@@ -471,7 +658,6 @@ def run_inference(
                     if key == 27 or key == ord("q"):
                         break
                 except cv2.error:
-                    # Ambiente headless sem display
                     pass
 
             if verbose and (idx % 10 == 0 or idx == len(image_files)):
@@ -496,8 +682,15 @@ def run_inference(
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             video_writer = cv2.VideoWriter(str(out_video_path), fourcc, fps, (width, height))
 
+        active_tracker = (
+            resolve_tracker_config(tracker, conf_threshold, out_dir)
+            if enable_tracking
+            else tracker
+        )
+
         if verbose:
-            print(f"\n🎥 Processando fluxo de vídeo ({width}x{height} @ {fps:.1f} FPS)...")
+            mode_str = f"com MOT ({tracker})" if enable_tracking else "sem Tracking"
+            print(f"\n🎥 Processando fluxo de vídeo ({width}x{height} @ {fps:.1f} FPS) [{mode_str}]...")
             if total_frames_est > 0:
                 print(f"   Total aproximado de quadros: {total_frames_est}")
 
@@ -513,30 +706,56 @@ def run_inference(
                 frame_idx += 1
                 frame_ts = datetime.now()
 
-                results = model.predict(
-                    source=frame,
-                    conf=conf_threshold,
-                    iou=iou_threshold,
-                    imgsz=img_size,
-                    device=active_device,
-                    verbose=False
-                )
+                if enable_tracking:
+                    results = model.track(
+                        source=frame,
+                        persist=True,
+                        tracker=active_tracker,
+                        conf=conf_threshold,
+                        iou=iou_threshold,
+                        imgsz=img_size,
+                        device=active_device,
+                        verbose=False
+                    )
+                else:
+                    results = model.predict(
+                        source=frame,
+                        conf=conf_threshold,
+                        iou=iou_threshold,
+                        imgsz=img_size,
+                        device=active_device,
+                        verbose=False
+                    )
 
-                boxes_xyxy = []
-                class_ids = []
-                confidences = []
+                boxes_xyxy: List[Tuple[int, int, int, int]] = []
+                class_ids: List[int] = []
+                confidences: List[float] = []
+                track_ids: List[Optional[int]] = []
 
                 for r in results:
                     if r.boxes is not None and len(r.boxes) > 0:
                         b_arr = r.boxes.xyxy.cpu().numpy()
                         c_arr = r.boxes.cls.cpu().numpy().astype(int)
                         conf_arr = r.boxes.conf.cpu().numpy()
+                        id_arr = (
+                            r.boxes.id.int().cpu().numpy()
+                            if (enable_tracking and r.boxes.id is not None)
+                            else None
+                        )
 
-                        for b, c, cf in zip(b_arr, c_arr, conf_arr):
+                        for i, (b, c, cf) in enumerate(zip(b_arr, c_arr, conf_arr)):
                             box_tuple = (int(b[0]), int(b[1]), int(b[2]), int(b[3]))
+                            tid = int(id_arr[i]) if id_arr is not None else None
+                            eff_c = int(c)
+
+                            # Aplica estabilização temporal de ruídos transitórios (Etapa 7.1)
+                            if tid is not None and temporal_filter is not None:
+                                eff_c = temporal_filter.update(track_id=tid, detected_class_id=eff_c)
+
                             boxes_xyxy.append(box_tuple)
-                            class_ids.append(int(c))
+                            class_ids.append(eff_c)
                             confidences.append(float(cf))
+                            track_ids.append(tid)
 
                 total_persons = len(class_ids)
                 conformant_count = sum(1 for c in class_ids if c == 1)
@@ -545,16 +764,26 @@ def run_inference(
                     (conformant_count / total_persons * 100.0) if total_persons > 0 else 100.0
                 )
 
-                # Registro das detecções
-                for det_id, (box, c, cf) in enumerate(zip(boxes_xyxy, class_ids, confidences), start=1):
+                # Registro das detecções e recorte de evidências
+                for det_id, (box, c, cf, tid) in enumerate(zip(boxes_xyxy, class_ids, confidences, track_ids), start=1):
                     crop_path_str = None
                     if save_crops and c == 0:
-                        crop = extract_roi(frame, box)
-                        if crop.size > 0:
-                            crop_filename = f"violation_frame{frame_idx}_det{det_id}_{frame_ts.strftime('%Y%m%d_%H%M%S_%f')[:19]}.jpg"
-                            crop_full_path = violations_dir / crop_filename
-                            cv2.imwrite(str(crop_full_path), crop)
-                            crop_path_str = str(crop_full_path)
+                        should_save_crop = True
+                        # Desduplicação de evidências fotográficas (Opção B)
+                        if enable_tracking and tid is not None and dedup_by_track:
+                            if tid in saved_crop_track_ids:
+                                should_save_crop = False
+
+                        if should_save_crop:
+                            crop = extract_roi(frame, box)
+                            if crop.size > 0:
+                                tid_tag = f"_track{tid}" if tid is not None else ""
+                                crop_filename = f"violation{tid_tag}_frame{frame_idx}_det{det_id}_{frame_ts.strftime('%Y%m%d_%H%M%S_%f')[:19]}.jpg"
+                                crop_full_path = violations_dir / crop_filename
+                                cv2.imwrite(str(crop_full_path), crop)
+                                crop_path_str = str(crop_full_path)
+                                if tid is not None:
+                                    saved_crop_track_ids.add(tid)
 
                     auditor.record_detection(
                         source=source_name,
@@ -563,6 +792,7 @@ def run_inference(
                         class_id=c,
                         confidence=cf,
                         bbox_xyxy=box,
+                        track_id=tid,
                         timestamp=frame_ts,
                         crop_path=crop_path_str,
                     )
@@ -585,6 +815,7 @@ def run_inference(
                         class_ids=class_ids,
                         confidences=confidences,
                         class_names=labels_map,
+                        track_ids=track_ids if enable_tracking else None,
                         thickness=2
                     )
 
@@ -639,10 +870,18 @@ def run_inference(
         print(f"🏢 Local / Câmera        : {summary['camera_id']}")
         print(f"🎞️  Quadros Processados    : {summary['total_frames_processed']}")
         print(f"🚨 Quadros com Infração   : {summary['frames_with_violations']}")
-        print(f"👥 Total de Detecções     : {summary['total_detections']}")
-        print(f"✅ Conformes (Capacete)   : {summary['conformant_helmets']}")
-        print(f"❌ Infrações (Sem EPI)    : {summary['violations_head']}")
-        print(f"📈 Taxa de Conformidade   : {summary['overall_compliance_rate_percent']:.1f}%")
+        print(f"📝 Ocorrências no CSV     : {summary['total_detections_logged']}")
+        print(f"✅ Conformes Registrados  : {summary['conformant_helmets_logged']}")
+        print(f"❌ Infrações Registradas  : {summary['violations_head_logged']}")
+        if summary.get("tracking_enabled"):
+            print(f"🔄 Rastreamento (MOT)     : Ativo ({tracker})")
+            print(f"🧹 Desduplicação (Opção B): {'Ativa (1 registro/indivíduo)' if summary['dedup_by_track'] else 'Desativada'}")
+            print(f"👥 Indivíduos Únicos (IDs): {summary['unique_persons_tracked']}")
+            print(f"🛡️  Conformes Únicos       : {summary['unique_conformant']}")
+            print(f"⚠️  Infratores Únicos      : {summary['unique_violators']}")
+            print(f"📊 Conformidade Única     : {summary['unique_compliance_rate_percent']:.1f}%")
+        else:
+            print(f"📈 Taxa de Conformidade   : {summary['overall_compliance_rate_percent']:.1f}%")
         print(f"🎯 Confiança Média        : {summary['mean_confidence']:.2f}")
         print(f"📢 Status Operacional     : {summary['status']}")
         print("=" * 78)
@@ -655,7 +894,7 @@ def parse_args() -> argparse.Namespace:
     Interface de Linha de Comando (CLI) para execução do módulo de inferência.
     """
     parser = argparse.ArgumentParser(
-        description="EPI Finder - Módulo de Inferência Operacional e Auditoria de SST (Fase 6)",
+        description="EPI Finder - Módulo de Inferência Operacional e Auditoria de SST (Fase 7.1)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -744,6 +983,28 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Desativa o painel superior de telemetria nos frames.",
     )
+    parser.add_argument(
+        "--track",
+        action="store_true",
+        help="Habilita Multi-Object Tracking (MOT - Etapa 7.1) no processamento de vídeo/webcam.",
+    )
+    parser.add_argument(
+        "--tracker",
+        type=str,
+        default="bytetrack.yaml",
+        help="Algoritmo de rastreamento nativo do YOLOv8 (ex: bytetrack.yaml, botsort.yaml).",
+    )
+    parser.add_argument(
+        "--min-consecutive-frames",
+        type=int,
+        default=3,
+        help="Número mínimo de frames consecutivos para confirmação temporal de infração (debounce).",
+    )
+    parser.add_argument(
+        "--no-dedup",
+        action="store_true",
+        help="Desativa a desduplicação da Opção B (registra todas as ocorrências a cada frame no CSV).",
+    )
 
     return parser.parse_args()
 
@@ -769,6 +1030,10 @@ def main() -> None:
             show=args.show,
             alert_labels=not args.standard_labels,
             draw_banner=not args.no_banner,
+            enable_tracking=args.track,
+            tracker=args.tracker,
+            min_consecutive_frames=args.min_consecutive_frames,
+            dedup_by_track=not args.no_dedup,
             verbose=True,
         )
     except Exception as exc:

@@ -258,6 +258,7 @@ def draw_bounding_boxes(
     class_ids: Union[List[int], np.ndarray],
     confidences: Optional[Union[List[float], np.ndarray]] = None,
     class_names: Optional[Dict[int, str]] = None,
+    track_ids: Optional[Union[List[Optional[int]], np.ndarray]] = None,
     thickness: int = 2
 ) -> np.ndarray:
     """
@@ -271,6 +272,7 @@ def draw_bounding_boxes(
         class_ids: Lista ou array com os IDs de classe.
         confidences: Opcional, lista/array com as pontuações de confiança [0.0 - 1.0].
         class_names: Mapeamento {id: nome}. Padrão usa DEFAULT_CLASSES.
+        track_ids: Opcional, identificador numérico de rastreamento (MOT) para cada caixa.
         thickness: Espessura da borda da caixa.
 
     Returns:
@@ -287,12 +289,16 @@ def draw_bounding_boxes(
         color = CLASS_COLORS_BGR.get(cls_id, (255, 255, 255))
         class_name = names.get(cls_id, f"Class {cls_id}")
 
-        # Monta o rótulo de texto
+        # Monta o rótulo de texto base
         if confidences is not None and idx < len(confidences):
             conf = float(confidences[idx])
             label = f"{class_name} {conf:.2f}"
         else:
             label = class_name
+
+        # Incorpora o Track ID se disponível
+        if track_ids is not None and idx < len(track_ids) and track_ids[idx] is not None:
+            label = f"ID #{track_ids[idx]} {label}"
 
         # Desenha o retângulo da caixa delimitadora
         cv2.rectangle(canvas, (x1, y1), (x2, y2), color, thickness)

@@ -371,10 +371,53 @@ Durante o desenvolvimento do módulo operacional, consolidei aprendizados fundam
 
 ---
 
-## 9. Próximos Passos (Fase 7: Extensões Opcionais)
+## 9. Fase 7: Extensões Avançadas de Rastreamento (MOT) e Dashboard
 
-1. **Interface Web Interativa (Streamlit / Gradio):** Criar um dashboard no navegador onde usuários façam upload de vídeos e vejam os gráficos de conformidade atualizados em tempo real.
-2. **Rastreamento de Objetos (*Multi-Object Tracking*):** Adicionar algoritmos de tracking (como ByteTrack ou BoT-SORT com `model.track(source=...)`) para rastrear o mesmo trabalhador ao longo dos frames e evitar contagens duplicadas no relatório de infrações.
+Nesta fase avançada, expandi o projeto para resolver gargalos clássicos de visão computacional aplicada a CFTV industrial: redundância massiva de alertas repetidos por frame, poluição de armazenamento em disco e oscilações transitórias de detecção.
+
+---
+
+### 9.1. Etapa 7.1: Rastreamento de Múltiplos Objetos (Multi-Object Tracking - MOT)
+
+Na Etapa 7.1, transformei a inferência estática em um **sistema inteligente de monitoramento temporal contínuo**, implementando persistência de identidade, filtragem de ruídos e desduplicação cirúrgica de eventos de conformidade.
+
+#### 1. Habilitação do Algoritmo ByteTrack no YOLOv8
+* **Associação Temporal com Persistência (`persist=True`):**
+  * Integrei a chamada `model.track(source=frame, persist=True, tracker="bytetrack.yaml")` no loop de processamento de vídeo e streams de CFTV ([`src/inference.py`](src/inference.py)).
+  * Cada trabalhador detectado recebe um `Track ID` numérico único e persistente, permitindo que a IA compreenda que a mesma pessoa está presente ao longo de múltiplos quadros consecutivos.
+* **Calibração Dinâmica do Tracker (`resolve_tracker_config`):**
+  * Identifiquei que o algoritmo ByteTrack padrão do Ultralytics descarta associações de IDs para predições com pontuação abaixo de `0.25` (`new_track_thresh: 0.25`).
+  * Para assegurar que o rastreador opere perfeitamente mesmo quando o usuário ajusta limiares de confiança customizados (`conf_threshold < 0.25`), implementei uma rotina que gera dinamicamente configurações calibradas do ByteTrack, viabilizando o tracking contínuo sob qualquer sensibilidade selecionada.
+* **Anotações Visuais Enriquecidas ([`src/utils.py`](src/utils.py)):**
+  * Atualizei a função `draw_bounding_boxes` para estampar a identificação do indivíduo diretamente no frame: `f"ID #{track_id} {status_label} {confidence:.2f}"`.
+
+#### 2. Mecanismo de Desduplicação de Logs e Evidências (Opção B)
+* **Problema Resolvido:** Em um vídeo a 30 FPS, uma pessoa sem capacete que permanece 10 segundos no campo de visão gerava anteriormente 300 linhas idênticas de infração no CSV e até 300 arquivos de imagens recortadas no disco rígido.
+* **Estratégia Escolhida (Opção B):**
+  * Configurei o `ComplianceAuditor` para filtrar diretamente o `compliance_report.csv`, armazenando **somente a primeira detecção de cada `Track ID`**.
+  * Em meus testes operacionais de 40 quadros com 6 trabalhadores simultâneos, a volumetria de logs foi reduzida de 240 entradas redundantes para **apenas 8 registros únicos** (1 para cada indivíduo rastreado).
+* **Economia Crítica de Armazenamento e I/O de Disco:**
+  * Sincronizei o salvamento de evidências fotográficas (`save_crops` em `runs/inference/violations/`) com a desduplicação por `Track ID`: cada infrator gera **apenas 1 foto de evidência** (`violation_track{id}_frame{frame}_...jpg`), economizando gigabytes de armazenamento em servidores de segurança patrimonial e CFTV.
+
+#### 3. Filtro de Estabilização Temporal (*Temporal Smoothing / Debounce*)
+* **Classe `TemporalTrackerFilter`:**
+  * Evito que oscilações rápidas de 1 ou 2 quadros (como o trabalhador virar o rosto bruscamente, sombras de guindastes ou reflexos transitórios) disparem alarmes falsos de "SEM CAPACETE" para quem está devidamente protegido.
+  * Gerencio um buffer histórico por indivíduo (`min_consecutive_frames`, padrão: 3 a 5 quadros), confirmando a mudança de status apenas se a predição persistir consistente ao longo da janela temporal.
+
+#### 4. Métricas e KPIs de Indivíduos Únicos
+* O `ComplianceAuditor` e o sumário executivo `summary.json` agora diferenciam detecções brutas de indivíduos reais:
+  * `unique_persons_tracked`: Total de trabalhadores únicos que circularam pelo posto.
+  * `unique_conformant`: Quantidade de pessoas que utilizaram capacete regularmente.
+  * `unique_violators`: Quantidade de indivíduos flagrados em infração.
+  * `unique_compliance_rate_percent`: Taxa real de conformidade por trabalhador único:
+    $$\text{Taxa Única} = \left( \frac{\text{Conformes Únicos}}{\text{Pessoas Únicas Rastreadas}} \right) \times 100$$
+
+---
+
+### 9.2. Próximos Passos (Etapa 7.2: Dashboard Interativo de SST com Streamlit)
+
+1. **Interface Web Interativa:** Construir um dashboard em Python utilizando **Streamlit** que permita a upload de vídeos e ajuste interativo de limiares com sliders (`conf_threshold`, `iou_threshold`, seleção do rastreador ByteTrack/BoT-SORT).
+2. **Diagnósticos Visuais em Tempo Real:** Exibir métricas dinâmicas (KPIs da CIPA/SST), gráficos interativos de rosca da taxa de conformidade e galeria de evidências das infrações desduplicadas.
 
 
 
