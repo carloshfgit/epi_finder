@@ -289,3 +289,4 @@ Criação de um painel de controle executado diretamente no navegador web:
 7. [x] Validar métricas cegas, estruturar script modular de avaliação (`src/evaluate.py`) e notebook analítico (`notebooks/03_model_evaluation.ipynb`).
 8. [x] Construir o script de inferência operacional com alertas visuais (`src/inference.py`), recorte de evidências (NumPy) e relatórios de conformidade com Pandas (Fase 6).
 9. [x] Implementar rastreamento de múltiplos objetos (MOT ByteTrack/BoT-SORT), persistência de IDs, desduplicação de logs e evidências fotográficas (Opção B) e filtro de estabilização temporal (Etapa 7.1).
+10. [x] Desenvolver dashboard interativo de SST com Streamlit (`app.py`), suporte a fotos, vídeos com MOT, teste via webcam (`st.camera_input`) e inteligência analítica com gráficos Plotly (`src/analytics.py`) (Etapa 7.2).

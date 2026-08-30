@@ -8,6 +8,7 @@
 ![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter_Lab-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 
 > **Nota de Propósito:** Este projeto foi desenvolvido para fins de **estudo, aprendizado prático e consolidação de conceitos** em **Visão Computacional**, **Deep Learning (YOLOv8)**, **Manipulação Matricial (NumPy)**, **Análise de Dados (Pandas)** e **Práticas de Engenharia de Machine Learning (MLOps)**.
 
@@ -71,6 +72,11 @@ O YOLOv8 equilibra simultaneamente três funções de custo para guiar o gradien
 * **Filtro de Estabilização Temporal (*Debounce*):** A classe `TemporalTrackerFilter` mantém um buffer histórico de classificações, exigindo $N$ quadros consecutivos de consistência antes de confirmar uma mudança de status, mitigando ruídos transitórios causados por movimentos bruscos ou reflexos.
 * **Métricas de Pessoas Únicas:** Diferenciação entre contagem bruta de frames e indicadores reais de auditoria da CIPA/SST (`unique_persons_tracked`, `unique_violators`, `unique_compliance_rate_percent`).
 
+### 9. Dashboard Interativo de SST & CIPA (Streamlit + Plotly)
+* **Interface Web Unificada:** Operação em navegador web intuitivo com suporte a upload de fotos, processamento de vídeo com MOT em tempo real e teste estático com webcam via `st.camera_input`.
+* **Separação de Preocupações (SoC):** Desacoplamento entre camada de apresentação (`app.py`), inteligência de visão computacional (`src/inference.py`) e analítica de dados (`src/analytics.py`).
+* **Visualização Gráfica Dinâmica:** Gráficos interativos em Plotly (rosca de conformidade de EPI, evolução temporal de fluxo de trabalhadores e ranking por postos de trabalho).
+
 ---
 
 ## Estrutura do Repositório
@@ -79,6 +85,7 @@ O projeto segue boas práticas de engenharia de software e ciência de dados, co
 
 ```text
 epi_finder/
+├── app.py                    # Aplicação web Streamlit (Dashboard Interativo SST/CIPA)
 ├── data/
 │   ├── dataset/              # Dataset particionado (Roboflow Universe)
 │   │   ├── train/            # 831 imagens (3.666 anotações - 87,8%)
@@ -95,7 +102,8 @@ epi_finder/
 │   ├── utils.py              # Cálculo de IoU matricial, conversão de caixas e OpenCV
 │   ├── train.py              # CLI para treinamento modular e versionamento de pesos
 │   ├── evaluate.py           # CLI para auditoria de métricas e exportação em JSON
-│   └── inference.py          # CLI operacional: inferência, MOT (ByteTrack), recorte de evidências e CSV
+│   ├── inference.py          # Inferência operacional, MOT (ByteTrack), recorte de evidências e CSV
+│   └── analytics.py          # KPIs de conformidade da CIPA e geração de gráficos Plotly
 ├── models/                   # Centralização de modelos e auditoria
 │   ├── best.pt               # Melhores pesos treinados (.pt)
 │   ├── metadata.json         # Certidão de nascimento e hiperparâmetros do modelo
@@ -166,6 +174,12 @@ Você pode rodar comandos diretamente dentro do container sem precisar do navega
   ```bash
   docker compose exec epi-finder python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt --track --tracker bytetrack.yaml --save-crops
   ```
+* **Para iniciar o Dashboard Interativo de SST (Streamlit):**
+  ```bash
+  docker compose exec epi-finder streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+  ```
+  Acesse no seu navegador: `http://localhost:8501`.
+
 * **Para verificar ajuda e parâmetros de qualquer script CLI:**
   ```bash
   docker compose exec epi-finder python src/train.py --help
@@ -209,12 +223,15 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### 4. Iniciar o Jupyter Lab ou rodar os scripts
+#### 4. Iniciar o Dashboard Streamlit ou rodar os scripts
 ```bash
-# Iniciar o ambiente interativo
+# Iniciar o Dashboard Interativo SST & CIPA no navegador:
+streamlit run app.py
+
+# Iniciar o ambiente interativo de notebooks:
 jupyter lab
 
-# Executar a inferência em imagens:
+# Executar a inferência em imagens via terminal:
 python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops
 
 # Executar a inferência em vídeo com rastreamento contínuo (MOT):

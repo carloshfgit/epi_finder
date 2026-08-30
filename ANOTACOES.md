@@ -414,10 +414,22 @@ Na Etapa 7.1, transformei a inferência estática em um **sistema inteligente de
 
 ---
 
-### 9.2. Próximos Passos (Etapa 7.2: Dashboard Interativo de SST com Streamlit)
+### 9.2. Etapa 7.2: Dashboard Interativo de SST com Streamlit & Plotly (Concluída)
 
-1. **Interface Web Interativa:** Construir um dashboard em Python utilizando **Streamlit** que permita a upload de vídeos e ajuste interativo de limiares com sliders (`conf_threshold`, `iou_threshold`, seleção do rastreador ByteTrack/BoT-SORT).
-2. **Diagnósticos Visuais em Tempo Real:** Exibir métricas dinâmicas (KPIs da CIPA/SST), gráficos interativos de rosca da taxa de conformidade e galeria de evidências das infrações desduplicadas.
+Nesta etapa final de engenharia do sistema, consolidei a plataforma operacional com foco na experiência do usuário e em diagnósticos executivos para a CIPA. O desenvolvimento desta interface me permitiu aplicar na prática conceitos avançados de design de sistemas e refinar minha compreensão sobre a integração de visão computacional em tempo real com dashboards analíticos.
+
+#### 1. Aprendizados Práticos em Arquitetura em Camadas (Separation of Concerns - SoC)
+Para evitar o acoplamento monolítico que frequentemente engessa projetos de ciência de dados, estruturei o sistema em três camadas independentes. Essa decisão de design facilitou muito a escrita de testes automatizados e isolou as responsabilidades de forma clara:
+* **Camada de Apresentação (`app.py`):** Ao desenvolver o ponto de entrada da aplicação, aprendi a lidar com o modelo de execução linear do Streamlit. Compreendi como gerenciar de forma eficiente o ciclo de vida dos componentes reativos (`st.sidebar`, `st.tabs`, `st.metric`, `st.file_uploader`, `st.camera_input`), layouts CSS personalizados e, principalmente, como persistir informações entre interações usando o estado da sessão (`st.session_state`).
+* **Camada de Visão Computacional (`src/inference.py`):** Aqui, encapsulei toda a lógica de inteligência artificial. Tive a oportunidade prática de aplicar técnicas de otimização de performance, como o uso de `@st.cache_resource` para evitar o recarregamento redundante dos pesos do modelo YOLO na memória. Também aprofundei meus conhecimentos sobre geradores Python (`yield`) para o fluxo contínuo de vídeo (`process_video_stream`) integrado aos filtros de ruído e rastreadores (ByteTrack/BoT-SORT).
+* **Camada Analítica de SST (`src/analytics.py`):** Dediquei esta camada ao processamento estatístico de dados de segurança do trabalho. Pratiquei a manipulação avançada de DataFrames no Pandas para consolidar os relatórios de auditoria (`compliance_report.csv` e `frame_summary.csv`), computar métricas agregadas e renderizar figuras dinâmicas em Plotly, melhorando minhas habilidades de visualização de dados com gráficos interativos.
+
+#### 2. Aprendizados no Desenvolvimento dos Recursos Funcionais
+A implementação de cada funcionalidade trouxe desafios práticos e aprendizados teóricos específicos:
+1. **Detecção em Imagens:** Aprendi a estruturar layouts de comparação lado a lado (Original vs Anotada com telemetria de conformidade) e a manipular coordenadas de detecção para recortar automaticamente áreas de interesse, gerando uma galeria visual com foco nos infratores.
+2. **Vídeos com MOT Contínuo:** Entendi como conciliar o processamento pesado de IA quadro a quadro com o fluxo reativo da interface gráfica, utilizando barras de progresso síncronas e calculando KPIs de forma incremental à medida que o vídeo é processado.
+3. **Teste Estático com Webcam (`st.camera_input`):** Este recurso me trouxe um grande aprendizado arquitetural. Percebi que, para testes rápidos em navegadores, o uso do componente nativo de câmera do Streamlit é uma alternativa incrivelmente leve que evita o overhead e a complexidade de configurar servidores de sinalização WebRTC (STUN/TURN), sendo ideal para ambientes de deploy com recursos limitados como o Streamlit Community Cloud.
+4. **Dashboard de Auditoria CIPA/SST:** Consolidei meu entendimento prático sobre como traduzir dados brutos de detecção em inteligência de negócios de SST, aplicando a lógica de desduplicação temporal por ID de rastreamento para obter a taxa real de conformidade e plotar tendências históricas significativas.
 
 
 

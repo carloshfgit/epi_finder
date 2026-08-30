@@ -6,6 +6,7 @@ services:
     container_name: epi_finder_app
     ports:
       - "8888:8888" # Jupyter Lab
+      - "8501:8501" # Streamlit Dashboard
     volumes:
       # Sincroniza o diretório do projeto entre o host e o container
       - .:/app

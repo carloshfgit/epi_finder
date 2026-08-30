@@ -26,8 +26,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copia o restante do código do projeto para o container
 COPY . .
 
-# Expõe a porta para o Jupyter Lab
-EXPOSE 8888
+# Expõe portas para Jupyter Lab (8888) e Streamlit (8501)
+EXPOSE 8888 8501
 
 # Comando padrão: Inicia o Jupyter Lab acessível pelo navegador do host
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
