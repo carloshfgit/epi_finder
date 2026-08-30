@@ -252,10 +252,25 @@ Ao processar vídeos contínuos de câmeras:
 
 ---
 
-## 🏆 Fase 7: Próximos Passos (Extensões Opcionais)
+## 🏆 Fase 7: Próximos Passos (Extensões Opcionais de Rastreamento e Web App)
 
-1. **Dashboard com Streamlit:** Interface web onde o usuário faz upload de um vídeo e vê a contagem de conformidade em tempo real.
-2. **Rastreamento de Pessoas (Tracking):** Adicionar `model.track(source="video.mp4")` para não contar a mesma pessoa sem capacete múltiplas vezes no mesmo vídeo.
+Nesta fase avançada, o projeto é expandido para solucionar gargalos clássicos de produção em CFTV (como a redundância de logs por frame) e entregar uma interface interativa rica no navegador para os analistas de segurança.
+
+### Etapa 7.1: Rastreamento de Objetos (Multi-Object Tracking - MOT)
+Para evitar que uma única pessoa sem capacete gere centenas de alertas repetidos ao longo do vídeo, implementamos a persistência de IDs:
+* **Habilitação do Tracking:** Utilizar o algoritmo nativo do YOLOv8 (como **ByteTrack** ou **BoT-SORT**) para atribuir e manter IDs numéricos únicos (`Track ID`) a cada trabalhador em movimento:
+  ```python
+  results = model.track(source="video.mp4", persist=True, tracker="bytetrack.yaml")
+  ```
+* **Mecanismo de Desduplicação de Logs:** Modificar o agregador `ComplianceAuditor` para armazenar em memória (ex: usando `set()`) os IDs de infração que já foram registrados, prevenindo a gravação de logs redundantes no CSV e poupando armazenamento com capturas repetidas de evidências.
+* **Filtro de Estabilização Temporal:** Aplicar regras de suavização (ex: registrar infração somente se a pessoa for detectada como `head` por mais de 5 quadros consecutivos), minimizando ruídos rápidos de oscilação do modelo.
+
+### Etapa 7.2: Dashboard Interativo de SST com Streamlit
+Criação de um painel de controle executado diretamente no navegador web:
+* **Interface Gráfica:** Desenvolver um aplicativo em Python utilizando **Streamlit** que permita a upload de mídias de vídeo e seleção de limiares de confiança (`conf_threshold`) em sliders interativos.
+* **Métricas em Tempo Real:** Exibir painéis numéricos grandes com KPIs de conformidade atualizados dinamicamente à medida que o vídeo é processado.
+* **Gráficos Dinâmicos:** Renderizar gráficos interativos (como gráficos de rosca e séries temporais de conformidade) para fornecer diagnósticos visuais imediatos para auditorias da CIPA e SST.
+
 
 ---
 
