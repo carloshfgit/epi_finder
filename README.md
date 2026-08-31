@@ -10,9 +10,9 @@
 ![Jupyter](https://img.shields.io/badge/Jupyter_Lab-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 
-> **Nota de Propósito:** Este projeto foi desenvolvido para fins de **estudo, aprendizado prático e consolidação de conceitos** em **Visão Computacional**, **Deep Learning (YOLOv8)**, **Manipulação Matricial (NumPy)**, **Análise de Dados (Pandas)** e **Práticas de Engenharia de Machine Learning (MLOps)**. Todo o meu processo de aprendizado e estudo foi documentado em [ANOTACOES.md](ANOTACOES.md).
+> **Nota de Propósito:** Este projeto foi desenvolvido para fins de **estudo, aprendizado prático e consolidação de conceitos** em **Visão Computacional**, **Deep Learning (YOLOv8)**, **Manipulação Matricial (NumPy)**, **Análise de Dados (Pandas)** e **Práticas de Engenharia de Machine Learning (MLOps)**. Todo o meu processo de aprendizado e estudo foi documentado em [ANOTACOES.md](docs/ANOTACOES.md).
 >
-> **Acesso Rápido:** Quer ir direto ao ponto? Veja os comandos simplificados de inicialização em [QUICK_SETUP.md](QUICK_SETUP.md).
+> **Acesso Rápido:** Quer ir direto ao ponto? Veja os comandos simplificados de inicialização em [QUICK_SETUP.md](docs/QUICK_SETUP.md).
 
 ---
 
@@ -114,9 +114,14 @@ epi_finder/
 │   └── inference/            # Mídias anotadas, evidências (violations/) e relatórios CSV
 ├── Dockerfile                # Imagem oficial Python 3.12 com OpenCV e PyTorch
 ├── docker-compose.yml        # Orquestração do container com Jupyter Lab (porta 8888)
-├── requirements.txt          # Dependências do projeto
-├── GUIDE.md                  # Roadmap e guia passo a passo das fases
-├── ANOTACOES.md              # Diário de bordo detalhado com fundamentos teóricos
+├── docs/                     # Documentação complementar do projeto
+│   ├── ANOTACOES.md          # Diário de bordo detalhado com fundamentos teóricos
+│   ├── DEPLOY.md             # Guia de deploy no Streamlit Community Cloud
+│   ├── DESCRIPTION.md        # Descrição detalhada das classes e modelagem
+│   ├── GUIDE.md              # Roadmap e guia passo a passo das fases
+│   ├── QUICK_SETUP.md        # Comandos simplificados de inicialização rápida
+│   └── TROUBLESHOOTING.md    # Guia para resolução de problemas e erros comuns
+├── packages.txt              # Dependências do SO (OpenCV/FFmpeg no Streamlit Cloud)
 └── README.md                 # Documentação principal
 ```
 
@@ -124,7 +129,7 @@ epi_finder/
 
 ## Como Executar o Projeto em Qualquer Máquina
 
-> ⚡ **Dica:** Para um passo a passo enxuto sem as descrições detalhadas abaixo, utilize o guia de [Quick Setup](QUICK_SETUP.md).
+> ⚡ **Dica:** Para um passo a passo enxuto sem as descrições detalhadas abaixo, utilize o guia de [Quick Setup](docs/QUICK_SETUP.md).
 
 Você pode executar o projeto de duas formas:
 1. **Com Docker (Recomendado):** Ambiente 100% isolado, sem necessidade de configurar Python ou bibliotecas gráficas no seu sistema operacional.
@@ -246,8 +251,10 @@ python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt -
 
 ## Documentações Complementares
 
-* Para o roteiro didático e checklist completo: consulte o [GUIDE.md](GUIDE.md).
-* Para o diário de bordo e detalhamento dos fundamentos teóricos: consulte o [ANOTACOES.md](ANOTACOES.md).
+* Para o guia de publicação em produção: consulte o [DEPLOY.md](docs/DEPLOY.md).
+* Para o roteiro didático e checklist completo: consulte o [GUIDE.md](docs/GUIDE.md).
+* Para o diário de bordo e detalhamento dos fundamentos teóricos: consulte o [ANOTACOES.md](docs/ANOTACOES.md).
+* Para resolução de problemas e erros comuns: consulte o [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 * Para a gestão e auditoria de pesos treinados: consulte o [models/README.md](models/README.md).
 
 ---
