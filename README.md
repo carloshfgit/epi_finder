@@ -1,5 +1,6 @@
 # EPI Finder - Detector Inteligente de Capacete de Segurança
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://epifinder.streamlit.app/)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-00599C?style=for-the-badge)
@@ -10,9 +11,11 @@
 ![Jupyter](https://img.shields.io/badge/Jupyter_Lab-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
 
+> **Aplicação em Produção (Live Demo):** Acesse e teste a aplicação online gratuitamente pelo Streamlit Community Cloud: **[https://epifinder.streamlit.app/](https://epifinder.streamlit.app/)**
+>
 > **Nota de Propósito:** Este projeto foi desenvolvido para fins de **estudo, aprendizado prático e consolidação de conceitos** em **Visão Computacional**, **Deep Learning (YOLOv8)**, **Manipulação Matricial (NumPy)**, **Análise de Dados (Pandas)** e **Práticas de Engenharia de Machine Learning (MLOps)**. Todo o meu processo de aprendizado e estudo foi documentado em [ANOTACOES.md](docs/ANOTACOES.md).
 >
-> **Acesso Rápido:** Quer ir direto ao ponto? Veja os comandos simplificados de inicialização em [QUICK_SETUP.md](docs/QUICK_SETUP.md).
+> **Acesso Rápido:** Quer testar na sua máquina? Veja os comandos simplificados de inicialização em [QUICK_SETUP.md](docs/QUICK_SETUP.md).
 
 ---
 
@@ -129,123 +132,12 @@ epi_finder/
 
 ## Como Executar o Projeto em Qualquer Máquina
 
-> ⚡ **Dica:** Para um passo a passo enxuto sem as descrições detalhadas abaixo, utilize o guia de [Quick Setup](docs/QUICK_SETUP.md).
+> ⚡ **Dica:** Para um passo a passo enxuto, utilize o guia de [Quick Setup](docs/QUICK_SETUP.md).
 
-Você pode executar o projeto de duas formas:
-1. **Com Docker (Recomendado):** Ambiente 100% isolado, sem necessidade de configurar Python ou bibliotecas gráficas no seu sistema operacional.
-2. **Com Ambiente Virtual Local (`venv`):** Instalação direta no Python da sua máquina.
-
----
-
-### Opção 1: Executando com Docker e Docker Compose (Recomendado)
-
-#### 1. Pré-requisitos
-* Ter o **Docker** e o **Docker Compose** instalados na sua máquina ([Instruções Oficiais do Docker](https://docs.docker.com/get-docker/)).
-
-#### 2. Clonar o repositório
-```bash
-git clone https://github.com/carloshfgit/epi_finder.git
-cd epi_finder
-```
-
-#### 3. Construir a imagem e iniciar o ambiente
-```bash
-docker compose up --build
-```
-> O Docker irá compilar o ambiente Python 3.12 com todas as dependências de sistema (OpenCV, FFmpeg, PyTorch, Pandas, Ultralytics) e inicializará o **Jupyter Lab** automaticamente.
-
-#### 4. Acessar o Jupyter Lab
-Abra o seu navegador web favorito e acesse:
-**[http://localhost:8888](http://localhost:8888)**
-
-Você terá acesso direto aos notebooks interativos em `notebooks/`:
-* `01_eda_dataset.ipynb` (Fase 3: Análise Exploratória e NumPy)
-* `02_training_yolov8.ipynb` (Fase 4: Treinamento e Curvas de Perda)
-* `03_model_evaluation.ipynb` (Fase 5: Avaliação no Teste Cego e Métricas SST)
-* `04_inference_pipeline.ipynb` (Fase 6: Inferência, Recorte de Evidências e Auditoria Pandas)
-
-#### 5. Executar os scripts Python via CLI no Container
-Você pode rodar comandos diretamente dentro do container sem precisar do navegador:
-
-* **Para rodar o treinamento:**
-  ```bash
-  docker compose exec epi-finder python src/train.py --epochs 25 --batch 8
-  ```
-* **Para rodar a avaliação formal de métricas no split de teste:**
-  ```bash
-  docker compose exec epi-finder python src/evaluate.py --weights models/best.pt --split test
-  ```
-* **Para rodar a inferência operacional em imagens (com recorte de evidências e relatório CSV):**
-  ```bash
-  docker compose exec epi-finder python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops --camera-id "Canteiro 01 - Portaria"
-  ```
-* **Para rodar a inferência em vídeo com Rastreamento (MOT ByteTrack), desduplicação e recorte de evidências:**
-  ```bash
-  docker compose exec epi-finder python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt --track --tracker bytetrack.yaml --save-crops
-  ```
-* **Para iniciar o Dashboard Interativo de SST (Streamlit):**
-  ```bash
-  docker compose exec epi-finder streamlit run app.py --server.port 8501 --server.address 0.0.0.0
-  ```
-  Acesse no seu navegador: `http://localhost:8501`.
-
-* **Para verificar ajuda e parâmetros de qualquer script CLI:**
-  ```bash
-  docker compose exec epi-finder python src/train.py --help
-  docker compose exec epi-finder python src/evaluate.py --help
-  docker compose exec epi-finder python src/inference.py --help
-  ```
-
-#### 6. Parar o container
-```bash
-docker compose down
-```
-
----
-
-### Opção 2: Executando Localmente (Sem Docker / via Virtualenv)
-
-Caso prefira rodar diretamente no seu sistema operacional:
-
-#### 1. Pré-requisitos
-* **Python 3.10, 3.11 ou 3.12** instalado.
-* `git` instalado.
-
-#### 2. Criar e ativar o ambiente virtual
-```bash
-# Clone o repositório
-git clone https://github.com/carloshfgit/epi_finder.git
-cd epi_finder
-
-# No Linux ou macOS:
-python3 -m venv venv
-source venv/bin/activate
-
-# No Windows (Prompt de Comando ou PowerShell):
-python -m venv venv
-.\venv\Scripts\activate
-```
-
-#### 3. Instalar as dependências
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-#### 4. Iniciar o Dashboard Streamlit ou rodar os scripts
-```bash
-# Iniciar o Dashboard Interativo SST & CIPA no navegador:
-streamlit run app.py
-
-# Iniciar o ambiente interativo de notebooks:
-jupyter lab
-
-# Executar a inferência em imagens via terminal:
-python src/inference.py --source data/dataset/test/images/ --weights models/best.pt --save-crops
-
-# Executar a inferência em vídeo com rastreamento contínuo (MOT):
-python src/inference.py --source caminho/do/video.mp4 --weights models/best.pt --track --save-crops
-```
+Você pode executar ou experimentar o projeto de três formas:
+1. **Demonstração Online (Sem Instalação):** Acesse a interface web diretamente no ar em **[https://epifinder.streamlit.app/](https://epifinder.streamlit.app/)**.
+2. **Com Docker (Recomendado para Desenvolvimento):** Ambiente 100% isolado, sem necessidade de configurar Python ou bibliotecas gráficas no seu sistema operacional.
+3. **Com Ambiente Virtual Local (`venv`):** Instalação direta no Python da sua máquina.
 
 ---
 

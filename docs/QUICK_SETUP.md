@@ -1,14 +1,22 @@
 # ⚡ Quick Setup - EPI Finder
 
-Guia rápido e objetivo para colocar o ambiente de desenvolvimento e execução do **EPI Finder** para rodar em poucos minutos.
+Guia rápido e objetivo para experimentar e executar o **EPI Finder**.
 
 ---
 
-## 🛠️ Requisitos Prévios
+## 🌐 Teste Online Imediato (Sem Instalar Nada)
 
-Escolha um dos dois caminhos abaixo para executar o projeto:
-* **Opção A (Recomendado):** Docker e Docker Compose instalados.
-* **Opção B:** Python 3.10+ e gerenciador de pacotes pip instalados localmente.
+A aplicação está no ar com inferência em tempo real, upload de imagens/vídeos e teste por webcam:
+
+👉 **[https://epifinder.streamlit.app/](https://epifinder.streamlit.app/)**
+
+---
+
+## 🛠️ Execução Local
+
+Caso deseje rodar ou desenvolver localmente, escolha uma das opções:
+* **Opção A (Recomendado):** Docker e Docker Compose (ambiente 100% isolado).
+* **Opção B:** Python 3.10+ e ambiente virtual local (`venv`).
 
 ---
 
