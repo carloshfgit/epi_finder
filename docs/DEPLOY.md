@@ -39,20 +39,18 @@ flowchart TD
 Para que o deploy funcione sem falhas de bibliotecas ou caminhos, certifique-se de que os seguintes arquivos estão presentes na raiz do projeto:
 
 ### 2.1. `packages.txt` (Dependências do Sistema Operacional)
-O OpenCV e a manipulação de vídeo requerem bibliotecas nativas de renderização e codecs no Linux.
+Codecs e utilitários nativos de manipulação de vídeo no Linux.
 Arquivo: [`packages.txt`]
 ```text
-libgl1
-libglib2.0-0
-libgomp1
 ffmpeg
 ```
 
 ### 2.2. `requirements.txt` (Dependências Python)
+Utilizamos `opencv-python-headless` para evitar dependências de drivers de janela gráfica em servidores e nuvem.
 Arquivo: [`requirements.txt`]
 ```text
 ultralytics>=8.0.0
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0
 numpy>=1.24.0
 pandas>=2.0.0
 matplotlib>=3.7.0
