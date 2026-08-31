@@ -40,7 +40,7 @@ Para que o deploy funcione sem falhas de bibliotecas ou caminhos, certifique-se 
 
 ### 2.1. `packages.txt` (Dependências do Sistema Operacional)
 O OpenCV e a manipulação de vídeo requerem bibliotecas nativas de renderização e codecs no Linux.
-Arquivo: [`packages.txt`](file:///home/carloshf/epi_finder/packages.txt)
+Arquivo: [`packages.txt`]
 ```text
 libgl1
 libglib2.0-0
@@ -49,7 +49,7 @@ ffmpeg
 ```
 
 ### 2.2. `requirements.txt` (Dependências Python)
-Arquivo: [`requirements.txt`](file:///home/carloshf/epi_finder/requirements.txt)
+Arquivo: [`requirements.txt`]
 ```text
 ultralytics>=8.0.0
 opencv-python>=4.8.0
@@ -65,7 +65,7 @@ plotly>=5.18.0
 
 ### 2.3. `.streamlit/config.toml` (Parâmetros do Servidor e Tema)
 Configura o limite de upload de vídeos (200MB) e tema escuro customizado.
-Arquivo: [`.streamlit/config.toml`](file:///home/carloshf/epi_finder/.streamlit/config.toml)
+Arquivo: [`.streamlit/config.toml`]
 ```toml
 [server]
 headless = true
@@ -159,7 +159,7 @@ O Streamlit Community Cloud gratuito oferece **~1 GB de memória RAM** e CPUs co
 
 ### 🔴 1. Erro `ImportError: libGL.so.1: cannot open shared object file`
 - **Causa:** OpenCV precisa de bibliotecas gráficas do Linux que não vêm na imagem base padrão do Python.
-- **Solução:** Certifique-se de que o arquivo [`packages.txt`](file:///home/carloshf/epi_finder/packages.txt) está na raiz do repositório no GitHub com `libgl1` e `libglib2.0-0`. Em seguida, reinicie o app no Streamlit Cloud (*"Reboot app"*).
+- **Solução:** Certifique-se de que o arquivo [`packages.txt`](packages.txt) está na raiz do repositório no GitHub com `libgl1` e `libglib2.0-0`. Em seguida, reinicie o app no Streamlit Cloud (*"Reboot app"*).
 
 ### 🔴 2. `FileNotFoundError: models/best.pt`
 - **Causa:** O arquivo `.pt` foi bloqueado pelo `.gitignore` e não subiu para o GitHub.
@@ -185,4 +185,4 @@ O Streamlit Community Cloud possui integração contínua automática:
 ---
 
 > ✨ **Dica para Apresentações e Portfólio:**
-> Adicione o link do seu app em produção (ex: `https://epi-finder-sst.streamlit.app`) no topo do seu [`README.md`](file:///home/carloshf/epi_finder/README.md) e no seu perfil do LinkedIn / currículo como demonstração prática ao vivo!
+> Adicione o link do seu app em produção (ex: `https://epi-finder-sst.streamlit.app`) no topo do seu [`README.md`](README.md) e no seu perfil do LinkedIn / currículo como demonstração prática ao vivo!
