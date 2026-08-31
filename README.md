@@ -31,7 +31,7 @@ O **EPI Finder** é um sistema de detecção e rastreamento de objetos focado em
 
 ---
 
-## 🧠 Tópicos Teóricos Estudados e Consolidados
+## Tópicos Teóricos Estudados e Consolidados
 
 Durante a concepção e implementação deste projeto, diversos conceitos matemáticos, computacionais e de engenharia de software foram explorados em profundidade:
 
