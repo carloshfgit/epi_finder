@@ -56,3 +56,6 @@ mlruns/
 # Variáveis de ambiente e segredos
 .env
 .env.*
+
+# Assistentes & IA
+CLAUDE.md

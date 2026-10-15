@@ -351,7 +351,9 @@ class ComplianceAuditor:
         # Métricas de Indivíduos Únicos (MOT - Etapa 7.1)
         total_tracks = len(self.seen_track_ids)
         unique_violations = len(self.violation_track_ids)
-        unique_conformant = len(self.conformant_track_ids)
+        # Quem infringiu em algum frame não conta como conforme, mesmo que
+        # também tenha aparecido de capacete em outros frames.
+        unique_conformant = len(self.seen_track_ids - self.violation_track_ids)
         unique_rate = (
             float(round((unique_conformant / total_tracks) * 100.0, 2))
             if total_tracks > 0
@@ -384,10 +386,13 @@ class ComplianceAuditor:
         self,
         csv_path: Union[str, Path],
         json_path: Optional[Union[str, Path]] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        frames_csv_path: Optional[Union[str, Path]] = None,
     ) -> Tuple[Path, Optional[Path]]:
         """
-        Exporta o relatório detalhado em formato CSV e o sumário executivo em JSON.
+        Exporta o relatório detalhado em formato CSV, o sumário executivo em JSON
+        e, opcionalmente, o resumo por frame (frame_summary.csv) usado na série
+        temporal do dashboard.
         """
         csv_p = Path(csv_path).resolve()
         csv_p.parent.mkdir(parents=True, exist_ok=True)
@@ -403,10 +408,18 @@ class ComplianceAuditor:
             with open(json_p, "w", encoding="utf-8") as f:
                 json.dump(summary_dict, f, indent=2, ensure_ascii=False)
 
+        frames_p = None
+        if frames_csv_path is not None:
+            frames_p = Path(frames_csv_path).resolve()
+            frames_p.parent.mkdir(parents=True, exist_ok=True)
+            self.to_frame_summary_dataframe().to_csv(frames_p, index=False, encoding="utf-8")
+
         if verbose:
             print(f"📊 Relatório de Conformidade CSV salvo em: {csv_p}")
             if json_p:
                 print(f"📋 Sumário Executivo JSON salvo em:      {json_p}")
+            if frames_p:
+                print(f"⏱️  Resumo por Frame CSV salvo em:         {frames_p}")
 
         return csv_p, json_p
 
@@ -421,6 +434,7 @@ def run_inference(
     output_dir: Union[str, Path] = "runs/inference",
     report_csv: Optional[Union[str, Path]] = "runs/inference/compliance_report.csv",
     summary_json: Optional[Union[str, Path]] = "runs/inference/summary.json",
+    frame_summary_csv: Optional[Union[str, Path]] = None,
     camera_id: str = "Camera-01",
     save_crops: bool = False,
     save_media: bool = True,
@@ -447,6 +461,9 @@ def run_inference(
         output_dir: Diretório onde serão gravados os resultados.
         report_csv: Caminho para salvar a tabela CSV com as ocorrências.
         summary_json: Caminho para salvar o sumário consolidado em JSON.
+        frame_summary_csv: Caminho para salvar o resumo por frame em CSV
+                           (alimenta a série temporal do dashboard). Se None,
+                           grava 'frame_summary.csv' na mesma pasta de report_csv.
         camera_id: Identificador da câmera / local de monitoramento.
         save_crops: Se True, recorta e salva fotos de cada infração identificada.
         save_media: Se True, grava os arquivos de imagem ou vídeo anotados.
@@ -859,7 +876,14 @@ def run_inference(
 
     # EXPORTAÇÃO DOS RELATÓRIOS (CSV & JSON)
     if report_csv:
-        auditor.export_reports(csv_path=report_csv, json_path=summary_json, verbose=verbose)
+        if frame_summary_csv is None:
+            frame_summary_csv = Path(report_csv).with_name("frame_summary.csv")
+        auditor.export_reports(
+            csv_path=report_csv,
+            json_path=summary_json,
+            verbose=verbose,
+            frames_csv_path=frame_summary_csv,
+        )
 
     # SUMÁRIO EXECUTIVO FINAL
     summary = auditor.get_audit_summary()
@@ -1328,6 +1352,13 @@ def parse_args() -> argparse.Namespace:
         help="Caminho para salvar o resumo estruturado em JSON.",
     )
     parser.add_argument(
+        "--frame-summary-csv",
+        type=str,
+        default=None,
+        help="Caminho para salvar o resumo por frame em CSV (série temporal do dashboard). "
+        "Padrão: frame_summary.csv na mesma pasta de --report-csv.",
+    )
+    parser.add_argument(
         "--camera-id",
         type=str,
         default="Camera-01",
@@ -1399,6 +1430,7 @@ def main() -> None:
             output_dir=args.output_dir,
             report_csv=args.report_csv,
             summary_json=args.summary_json,
+            frame_summary_csv=args.frame_summary_csv,
             camera_id=args.camera_id,
             save_crops=args.save_crops,
             save_media=not args.no_media,
