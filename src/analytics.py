@@ -21,6 +21,25 @@ COLOR_VIOLATION = "#ef4444"   # Vermelho vibrante (Infração / Head)
 COLOR_BACKGROUND = "rgba(0,0,0,0)"
 COLOR_TEXT = "#e2e8f0"
 
+# O ComplianceAuditor (src/inference.py) exporta o resumo por frame com estes
+# nomes; os gráficos usam os nomes da direita.
+FRAME_SUMMARY_COLUMN_MAP = {
+    "frame_id": "frame_idx",
+    "conformant_helmets": "helmet_count",
+    "violations_head": "head_count",
+    "compliance_rate": "compliance_rate_percent",
+}
+
+
+def normalize_frame_summary_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Renomeia as colunas do frame_summary do ComplianceAuditor para o esquema dos gráficos."""
+    rename = {
+        src: dst
+        for src, dst in FRAME_SUMMARY_COLUMN_MAP.items()
+        if src in df.columns and dst not in df.columns
+    }
+    return df.rename(columns=rename) if rename else df
+
 
 def load_compliance_report(source: Union[str, Path, pd.DataFrame]) -> pd.DataFrame:
     """
@@ -86,7 +105,7 @@ def load_frame_summary(source: Union[str, Path, pd.DataFrame]) -> pd.DataFrame:
         except Exception:
             return pd.DataFrame()
 
-    return df
+    return normalize_frame_summary_columns(df)
 
 
 def calculate_kpis(
@@ -122,18 +141,19 @@ def calculate_kpis(
     }
 
     # Se já tivermos o sumário consolidado do ComplianceAuditor, usa como base
+    # (chaves conforme ComplianceAuditor.get_audit_summary em src/inference.py)
+    summary_has_tracking = bool(audit_summary and audit_summary.get("tracking_enabled", False))
     if audit_summary:
-        kpis["total_detections"] = int(audit_summary.get("total_detections", 0))
+        kpis["total_detections"] = int(audit_summary.get("total_detections_logged", 0))
         kpis["total_frames"] = int(audit_summary.get("total_frames_processed", 0))
-        counts = audit_summary.get("class_counts", {})
-        kpis["head_count"] = int(counts.get("head", 0))
-        kpis["helmet_count"] = int(counts.get("helmet", 0))
+        kpis["head_count"] = int(audit_summary.get("violations_head_logged", 0))
+        kpis["helmet_count"] = int(audit_summary.get("conformant_helmets_logged", 0))
         kpis["compliance_rate_percent"] = float(
-            audit_summary.get("compliance_rate_percent", 100.0)
+            audit_summary.get("overall_compliance_rate_percent", 100.0)
         )
-        if audit_summary.get("tracking_enabled", False):
+        if summary_has_tracking:
             kpis["has_tracking"] = True
-            kpis["unique_persons"] = int(audit_summary.get("total_unique_tracks", 0))
+            kpis["unique_persons"] = int(audit_summary.get("unique_persons_tracked", 0))
             kpis["unique_conformant"] = int(audit_summary.get("unique_conformant", 0))
             kpis["unique_violators"] = int(audit_summary.get("unique_violators", 0))
             kpis["unique_compliance_rate_percent"] = float(
@@ -152,7 +172,9 @@ def calculate_kpis(
         if total > 0:
             kpis["compliance_rate_percent"] = round((kpis["helmet_count"] / total) * 100, 1)
 
-        if "track_id" in df_detections.columns:
+        # O sumário do auditor vê todos os frames de cada track; o CSV pode estar
+        # desduplicado (só o 1º registro por track_id) e subestimar infratores.
+        if "track_id" in df_detections.columns and not summary_has_tracking:
             valid_tracks = df_detections["track_id"].dropna()
             # Filtra IDs válidos (não nulos e diferentes de -1)
             valid_tracks = valid_tracks[valid_tracks != -1]
@@ -312,6 +334,7 @@ def create_temporal_series_chart(
     if df_frames is None or df_frames.empty:
         return _empty_figure("Nenhum dado temporal registrado.")
 
+    df_frames = normalize_frame_summary_columns(df_frames)
     fig = go.Figure()
 
     # Eixo X pode ser frame_idx ou timestamp

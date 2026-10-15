@@ -16,6 +16,7 @@ from src.analytics import (
     load_compliance_report,
     load_frame_summary,
 )
+from src.inference import ComplianceAuditor
 
 
 def test_calculate_kpis_empty():
@@ -101,6 +102,60 @@ def test_temporal_series_chart():
     # Vazio
     fig_empty = create_temporal_series_chart(pd.DataFrame())
     assert isinstance(fig_empty, go.Figure)
+
+
+def test_temporal_series_chart_with_auditor_columns():
+    """O frame_summary real do ComplianceAuditor deve gerar as 3 séries."""
+    auditor = ComplianceAuditor(camera_id="Cam-Test")
+    auditor.record_frame_summary("test.mp4", 1, total_persons=2, conformant_count=2, violation_count=0)
+    auditor.record_frame_summary("test.mp4", 2, total_persons=2, conformant_count=1, violation_count=1)
+
+    fig = create_temporal_series_chart(auditor.to_frame_summary_dataframe())
+    assert len(fig.data) == 3
+    assert list(fig.data[0].x) == [1, 2]
+    assert list(fig.data[1].y) == [0, 1]
+
+
+def test_load_frame_summary_normalizes_auditor_csv(tmp_path: Path):
+    """O frame_summary.csv exportado pelo app é lido com as colunas dos gráficos."""
+    csv_file = tmp_path / "frame_summary.csv"
+    csv_file.write_text(
+        "frame_id,total_persons,conformant_helmets,violations_head,compliance_rate\n"
+        "1,2,2,0,100.0\n"
+    )
+    df = load_frame_summary(csv_file)
+    for col in ["frame_idx", "helmet_count", "head_count", "compliance_rate_percent"]:
+        assert col in df.columns
+
+
+def test_calculate_kpis_uses_real_audit_summary_keys():
+    """KPIs vêm do sumário real do auditor e não são sobrescritos pelo CSV desduplicado."""
+    auditor = ComplianceAuditor(camera_id="Cam-Test", dedup_by_track=True)
+    box = (10, 10, 50, 50)
+    # Track 1: começa de capacete e depois infringe (o CSV desduplicado só guarda o 'helmet')
+    auditor.record_detection("v.mp4", 1, 1, 1, 0.9, box, track_id=1)
+    auditor.record_detection("v.mp4", 2, 1, 0, 0.8, box, track_id=1)
+    auditor.record_detection("v.mp4", 2, 2, 1, 0.9, box, track_id=2)
+    auditor.record_frame_summary("v.mp4", 1, 1, 1, 0)
+    auditor.record_frame_summary("v.mp4", 2, 2, 1, 1)
+
+    summary = auditor.get_audit_summary()
+    kpis = calculate_kpis(
+        df_detections=auditor.to_dataframe(),
+        audit_summary=summary,
+    )
+    assert kpis["total_frames"] == 2
+    assert kpis["has_tracking"] is True
+    assert kpis["unique_persons"] == 2
+    assert kpis["unique_violators"] == 1
+    assert kpis["unique_conformant"] == 1
+    assert kpis["unique_compliance_rate_percent"] == 50.0
+
+    # Só com o sumário (sem CSV), as contagens por detecção também vêm das chaves reais
+    kpis_summary_only = calculate_kpis(audit_summary=summary)
+    assert kpis_summary_only["total_detections"] == summary["total_detections_logged"]
+    assert kpis_summary_only["helmet_count"] == summary["conformant_helmets_logged"]
+    assert kpis_summary_only["head_count"] == summary["violations_head_logged"]
 
 
 def test_confidence_distribution_chart():

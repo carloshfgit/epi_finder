@@ -120,6 +120,43 @@ class TestComplianceAuditorDedup(unittest.TestCase):
         self.assertEqual(summary["unique_persons_tracked"], 1)
         self.assertEqual(summary["unique_conformant"], 1)
 
+    def test_export_reports_writes_frame_summary(self):
+        """export_reports grava o frame_summary.csv lido pelo dashboard (aba Analítica)."""
+        import tempfile
+        from src.analytics import load_frame_summary
+
+        auditor = ComplianceAuditor(camera_id="Cam-Test")
+        auditor.record_frame_summary("test.mp4", 1, total_persons=2, conformant_count=1, violation_count=1)
+        auditor.record_frame_summary("test.mp4", 2, total_persons=1, conformant_count=1, violation_count=0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frames_csv = Path(tmp) / "frame_summary.csv"
+            auditor.export_reports(
+                csv_path=Path(tmp) / "compliance_report.csv",
+                verbose=False,
+                frames_csv_path=frames_csv,
+            )
+            df = load_frame_summary(frames_csv)
+
+        self.assertEqual(len(df), 2)
+        self.assertListEqual(list(df["frame_idx"]), [1, 2])
+        self.assertListEqual(list(df["head_count"]), [1, 0])
+
+    def test_violator_with_helmet_frames_is_not_conformant(self):
+        """Quem aparece de capacete e depois sem capacete conta só como infrator."""
+        auditor = ComplianceAuditor(camera_id="Cam-Test", dedup_by_track=True)
+        box = (10, 10, 50, 50)
+
+        auditor.record_detection("test.mp4", 1, 1, 1, 0.9, box, track_id=7)  # helmet
+        auditor.record_detection("test.mp4", 2, 1, 0, 0.8, box, track_id=7)  # head
+        auditor.record_detection("test.mp4", 2, 2, 1, 0.9, box, track_id=8)  # helmet
+
+        summary = auditor.get_audit_summary()
+        self.assertEqual(summary["unique_persons_tracked"], 2)
+        self.assertEqual(summary["unique_violators"], 1)
+        self.assertEqual(summary["unique_conformant"], 1)
+        self.assertEqual(summary["unique_compliance_rate_percent"], 50.0)
+
 
 class TestVisualDrawingWithTrackIDs(unittest.TestCase):
     """Valida se as anotações visuais incorporam o Track ID."""
